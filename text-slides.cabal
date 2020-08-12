@@ -1,0 +1,52 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 1b153b2bb96ff34aa01c83cbae18344c73c89a6686b25f140b7919a175e5385e
+
+name:           text-slides
+version:        0.1
+synopsis:       Generate slides from markdown
+description:    text-slides generates slides in various formats from a markdown description. It offers supports for diagrams, importing drawings from keynote and for source code extraction.
+category:       Development
+homepage:       https://github.com/skogsbaer/text-slides#readme
+bug-reports:    https://github.com/skogsbaer/text-slides/issues
+author:         Stefan Wehr
+maintainer:     Stefan Wehr
+license:        BSD-3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    LICENSE
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/skogsbaer/text-slides
+
+executable text-slides
+  main-is: Main.hs
+  other-modules:
+      Paths_text_slides
+  hs-source-dirs:
+      src
+  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -rtsopts
+  build-depends:
+      QuickCheck
+    , base
+    , bytestring
+    , directory
+    , exceptions
+    , filepath
+    , process
+    , process-extras
+    , safe
+    , shake
+    , shell-escape
+    , text
+    , time
+    , unix
+  default-language: Haskell2010

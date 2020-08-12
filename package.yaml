@@ -1,0 +1,59 @@
+name:         text-slides
+version:      0.1
+synopsis:     Generate slides from markdown
+description:
+    text-slides generates slides in various formats from a markdown
+    description. It offers supports for diagrams, importing drawings
+    from keynote and for source code extraction.
+license:      BSD-3
+author:       Stefan Wehr
+maintainer:   Stefan Wehr
+github:       skogsbaer/text-slides
+category:     Development
+extra-source-files:
+  - LICENSE
+  - README.md
+
+dependencies:
+  - QuickCheck
+  - base
+  - bytestring
+  - directory
+  - exceptions
+  - filepath
+  - process
+  - process-extras
+  - safe
+  - shake
+  - shell-escape
+  - text
+  - time
+  - unix
+
+executable:
+  main: Main.hs
+  source-dirs:
+    - src
+
+ghc-options:
+  - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
+  - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind
+  - -fwarn-missing-signatures -fno-warn-partial-type-signatures
+  - -Wredundant-constraints -rtsopts
+
+default-extensions:
+  - DeriveDataTypeable
+  - DeriveFoldable
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveTraversable
+  - DerivingStrategies
+  - DoAndIfThenElse
+  - EmptyDataDecls
+  - FlexibleContexts
+  - GeneralizedNewtypeDeriving
+  - OverloadedStrings
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - TypeOperators
+  - ViewPatterns
