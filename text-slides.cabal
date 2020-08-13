@@ -15,7 +15,7 @@ homepage:       https://github.com/skogsbaer/text-slides#readme
 bug-reports:    https://github.com/skogsbaer/text-slides/issues
 author:         Stefan Wehr
 maintainer:     Stefan Wehr
-license:        BSD-3
+license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:

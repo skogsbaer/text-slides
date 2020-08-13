@@ -5,7 +5,7 @@ description:
     text-slides generates slides in various formats from a markdown
     description. It offers supports for diagrams, importing drawings
     from keynote and for source code extraction.
-license:      BSD-3
+license:      BSD3
 author:       Stefan Wehr
 maintainer:   Stefan Wehr
 github:       skogsbaer/text-slides
