@@ -18,9 +18,11 @@ dependencies:
   - QuickCheck
   - base
   - bytestring
+  - containers
   - directory
   - exceptions
   - filepath
+  - optparse-applicative
   - process
   - process-extras
   - safe

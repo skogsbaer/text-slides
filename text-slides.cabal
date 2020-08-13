@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1b153b2bb96ff34aa01c83cbae18344c73c89a6686b25f140b7919a175e5385e
+-- hash: 0fc761655109a45a5e48933fc20fb6dd3f436056e2eceba4d9e1d92ad4fd6ec5
 
 name:           text-slides
 version:        0.1
@@ -38,9 +38,11 @@ executable text-slides
       QuickCheck
     , base
     , bytestring
+    , containers
     , directory
     , exceptions
     , filepath
+    , optparse-applicative
     , process
     , process-extras
     , safe
