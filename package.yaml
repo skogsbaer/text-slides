@@ -14,28 +14,46 @@ extra-source-files:
   - LICENSE
   - README.md
 
-dependencies:
-  - QuickCheck
-  - base
-  - bytestring
-  - containers
-  - directory
-  - exceptions
-  - filepath
-  - optparse-applicative
-  - process
-  - process-extras
-  - safe
-  - shake
-  - shell-escape
-  - text
-  - time
-  - unix
+library:
+  source-dirs: src
+  dependencies:
+    - QuickCheck
+    - base
+    - bytestring
+    - containers
+    - directory
+    - exceptions
+    - filepath
+    - megaparsec
+    - optparse-applicative
+    - process
+    - process-extras
+    - safe
+    - shake
+    - shell-escape
+    - text
+    - time
+    - unix
 
 executable:
   main: Main.hs
-  source-dirs:
-    - src
+  source-dirs: app
+  dependencies:
+    - base
+    - text-slides
+
+tests:
+  unit-tests:
+    main: Tests.hs
+    source-dirs: test
+    dependencies:
+      - base
+      - containers
+      - text-slides
+      - HTF
+      - heredoc
+      - text
+    build-tools: HTF
 
 ghc-options:
   - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans

@@ -1,6 +1,8 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE RecordWildCards #-}
-module Main where
+module Cmdline (
+    parseCmdlineArgs
+) where
 
 import Options.Applicative
 import Safe
@@ -33,7 +35,8 @@ readOutputModes t =
         return (Set.fromList l)
 
 showOutputMode :: OutputMode -> T.Text
-showOutputMode m = fromJustNote ("unknown output mode: " ++ show m) $ L.lookup m outputModeStringMapping
+showOutputMode m =
+    fromJustNote ("unknown output mode: " ++ show m) $ L.lookup m outputModeStringMapping
 
 showOutputModes :: Set.Set OutputMode -> T.Text
 showOutputModes modes =
@@ -67,7 +70,5 @@ cmdlineOptsParserInfo =
         (fullDesc
          <> progDesc "Build a slide show from an extended markdown format.")
 
-main :: IO ()
-main = do
-    opts <- execParser cmdlineOptsParserInfo
-    putStrLn (show opts)
+parseCmdlineArgs :: IO CmdlineOpts
+parseCmdlineArgs = execParser cmdlineOptsParserInfo

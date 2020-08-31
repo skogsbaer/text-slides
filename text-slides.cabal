@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0fc761655109a45a5e48933fc20fb6dd3f436056e2eceba4d9e1d92ad4fd6ec5
+-- hash: 6334e409aabe79c94b59268ef5c46bc2594ce795a4ddd008d1a1177705d87414
 
 name:           text-slides
 version:        0.1
@@ -26,8 +26,11 @@ source-repository head
   type: git
   location: https://github.com/skogsbaer/text-slides
 
-executable text-slides
-  main-is: Main.hs
+library
+  exposed-modules:
+      Cmdline
+      Parser
+      Types
   other-modules:
       Paths_text_slides
   hs-source-dirs:
@@ -42,6 +45,7 @@ executable text-slides
     , directory
     , exceptions
     , filepath
+    , megaparsec
     , optparse-applicative
     , process
     , process-extras
@@ -51,4 +55,38 @@ executable text-slides
     , text
     , time
     , unix
+  default-language: Haskell2010
+
+executable text-slides
+  main-is: Main.hs
+  other-modules:
+      Paths_text_slides
+  hs-source-dirs:
+      app
+  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -rtsopts
+  build-depends:
+      base
+    , text-slides
+  default-language: Haskell2010
+
+test-suite unit-tests
+  type: exitcode-stdio-1.0
+  main-is: Tests.hs
+  other-modules:
+      Test.Parser
+      Paths_text_slides
+  hs-source-dirs:
+      test
+  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -rtsopts
+  build-tool-depends:
+      HTF:HTF
+  build-depends:
+      HTF
+    , base
+    , containers
+    , heredoc
+    , text
+    , text-slides
   default-language: Haskell2010

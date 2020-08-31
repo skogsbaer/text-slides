@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "text-slides:lib"
+    - path: "./test"
+      component: "text-slides:test:unit-tests"
+    - path: "./app"
+      component: "text-slides:exe:text-slides"
