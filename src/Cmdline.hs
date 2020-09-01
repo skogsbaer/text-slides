@@ -9,11 +9,7 @@ import Safe
 import qualified Data.List as L
 import qualified Data.Set as Set
 import qualified Data.Text as T
-
-data OutputMode
-    = OutputHtml
-    | OutputPdf
-    deriving (Eq, Ord, Show)
+import Types
 
 outputModeStringMapping :: [(OutputMode, T.Text)]
 outputModeStringMapping =

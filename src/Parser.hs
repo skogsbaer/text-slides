@@ -125,8 +125,8 @@ data ParseContext
 emptyParseContext :: ParseContext
 emptyParseContext = ParseContext [] Nothing
 
-parse :: FilePath -> M.Map PluginName PluginKind -> T.Text -> Fail [Token]
-parse file plugins input = do
+parseMarkdown :: FilePath -> M.Map PluginName PluginKind -> T.Text -> Fail [Token]
+parseMarkdown file plugins input = do
     ctx <- foldM handleLine emptyParseContext (zip [1..] (T.lines input))
     case pc_currentCall ctx of
         Just (call, _) ->

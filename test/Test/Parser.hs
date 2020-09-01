@@ -29,7 +29,7 @@ test_parsePluginCall = do
 
 test_parse :: IO ()
 test_parse = do
-    let tokens = parse "<input>" (M.fromList plugins) sampleInput
+    let tokens = parseMarkdown "<input>" (M.fromList plugins) sampleInput
     assertEqual (Right expected) tokens
   where
       plugins =
