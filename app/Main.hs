@@ -1,6 +1,6 @@
-import Cmdline
+{-# LANGUAGE MultiWayIf #-}
+
+import qualified Driver
 
 main :: IO ()
-main = do
-    opts <- parseCmdlineArgs
-    putStrLn (show opts)
+main = Driver.main

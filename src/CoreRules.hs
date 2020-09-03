@@ -7,6 +7,7 @@ import Utils
 import Types
 import Parser
 
+import Control.Monad
 import Development.Shake
 import System.FilePath
 import qualified Data.Map.Strict as M
@@ -17,7 +18,7 @@ runPandoc cfg mode inFile outFile = do
     need [inFile]
     let commonPandocArgs =
             [ "--from=markdown"
-            , "slide-level=2"
+            , "--slide-level=2"
             , "--highlight-style=pygments"
             , "--output=" ++ outFile
             ]
@@ -30,7 +31,7 @@ runPandoc cfg mode inFile outFile = do
                     ]
                 OutputPdf -> error "PDF not yet implemented"
         pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
-    mySystem INFO (bc_pandoc cfg) pandocArgs
+    mySystem NOTE (bc_pandoc cfg) pandocArgs
 
 transformMarkdown :: MonadFail m => BuildConfig -> FilePath -> T.Text -> m T.Text
 transformMarkdown _cfg inFile md = do
@@ -49,10 +50,11 @@ generateRawMarkdown cfg inFile outFile = do
     md <- myReadFile inFile
     rawMd <- transformMarkdown cfg inFile md
     myWriteFile outFile rawMd
+
 coreRules :: BuildConfig -> BuildArgs -> Rules ()
 coreRules cfg args = do
-    outFile ".html" %> runPandoc cfg OutputHtml raw
-    outFile ".pdf" %> runPandoc cfg OutputPdf raw
+    forM_ [minBound..maxBound] $ \mode ->
+        outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode raw
     raw %> generateRawMarkdown cfg (ba_inputFile args)
   where
     outFile ext = bc_buildDir cfg </> replaceExtension (ba_inputFile args) ext
