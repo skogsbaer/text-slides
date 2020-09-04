@@ -23,6 +23,7 @@ library:
     - containers
     - directory
     - exceptions
+    - extra
     - filepath
     - megaparsec
     - optparse-applicative
@@ -33,6 +34,7 @@ library:
     - shell-escape
     - text
     - time
+    - transformers
     - unix
 
 executable:
@@ -49,10 +51,13 @@ tests:
     dependencies:
       - base
       - containers
-      - text-slides
-      - HTF
+      - extra
       - heredoc
+      - HTF
+      - safe
+      - text-slides
       - text
+      - transformers
     build-tools: HTF
 
 ghc-options:

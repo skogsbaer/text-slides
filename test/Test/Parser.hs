@@ -2,6 +2,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Test.Parser where
 
+import Types
 import Parser
 import Text.Heredoc
 import Test.Framework
@@ -10,11 +11,12 @@ import qualified Data.Map as M
 
 test_parsePluginCall :: IO ()
 test_parsePluginCall = do
-    check "~~~foo  ()" (PluginCall (PluginName "foo") M.empty "")
-    check "~~~foo  " (PluginCall (PluginName "foo") M.empty "")
+    check "~~~foo  ()" (PluginCall (PluginName "foo") loc M.empty "")
+    check "~~~foo  " (PluginCall (PluginName "foo") loc M.empty "")
     check "~~~foo  (  k1 : \"string\",k2:42  , k3: true )  "
         (PluginCall
             { pc_pluginName = PluginName "foo"
+            , pc_location = loc
             , pc_args =
                 M.fromList
                 [ ("k1", ArgString "string")
@@ -24,6 +26,7 @@ test_parsePluginCall = do
             , pc_body = ""
             })
   where
+    loc = "<input>"
     check input expected =
         assertEqual (Right expected) (parsePluginCall "<input>" input)
 
@@ -38,7 +41,7 @@ test_parse = do
           ]
       expected =
           [ Line ""
-          , Plugin $ PluginCall (PluginName "keynote")
+          , Plugin $ PluginCall (PluginName "keynote") "<input>:2"
                   (M.fromList
                       [ ("file", ArgString "my_presentation.key")
                       , ("slide", ArgInt 1)
@@ -46,7 +49,7 @@ test_parse = do
                   ""
           , Line ""
           , Line "-- Source code --"
-          , Plugin $ PluginCall (PluginName "python") M.empty "print(foo(41))"
+          , Plugin $ PluginCall (PluginName "python") "<input>:5" M.empty "print(foo(41))"
           , Line ""
           , Line "~~~foo"
           ]

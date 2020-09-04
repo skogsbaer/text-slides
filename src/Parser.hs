@@ -11,28 +11,6 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Data.Char
 import Control.Monad
 
-data ArgValue
-    = ArgString T.Text
-    | ArgInt Int
-    | ArgBool Bool
-    deriving (Eq, Show)
-
-newtype PluginName = PluginName { unPluginName :: T.Text }
-    deriving (Eq, Ord, Show)
-
-data PluginCall
-    = PluginCall
-    { pc_pluginName :: PluginName
-    , pc_args :: (M.Map T.Text ArgValue)
-    , pc_body :: T.Text
-    }
-    deriving (Eq, Show)
-
-data PluginKind
-    = PluginWithoutBody
-    | PluginWithBody
-    deriving (Eq, Show)
-
 data Token
     = Line T.Text
     | Plugin PluginCall
@@ -82,6 +60,7 @@ pluginCallP = do
         { pc_pluginName = name
         , pc_args = M.fromList args
         , pc_body = ""
+        , pc_location = "?"
         }
   where
     argP =
@@ -113,7 +92,7 @@ parsePluginCall :: String -> T.Text -> Fail PluginCall
 parsePluginCall location line =
     case P.parse (pluginCallP <* P.eof) location line of
         Left err -> Left $ T.pack (P.errorBundlePretty err)
-        Right x -> Right x
+        Right x -> Right (x { pc_location = T.pack location })
 
 data ParseContext
     = ParseContext
@@ -143,8 +122,10 @@ parseMarkdown file plugins input = do
                      if rstripped == "~~~"
                      then return $ ParseContext
                               { pc_revTokens =
-                                    Plugin (call { pc_body =
-                                        T.stripEnd (T.unlines (reverse revCallLines))}) :
+                                    Plugin (call
+                                        { pc_body =
+                                            T.stripEnd (T.unlines (reverse revCallLines))
+                                        }) :
                                     pc_revTokens ctx
                               , pc_currentCall = Nothing
                               }

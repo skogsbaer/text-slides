@@ -9,6 +9,7 @@ defaultBuildConfig =
     BuildConfig
     { bc_buildDir = "./build"
     , bc_pandoc = "pandoc"
+    , bc_plugins = [] -- FIXME
     }
 
 getBuildConfig :: IO BuildConfig
