@@ -1,20 +1,35 @@
-module Logging (
+module Logging
+  ( LogLevel (..),
+    doLog,
+    trace,
+    traceIO,
+    debug,
+    debugIO,
+    note,
+    noteIO,
+    info,
+    infoIO,
+    warn,
+    warnIO,
+    setLogLevel,
+    getLogLevel,
+    isVerbose,
+    isDebug,
+    isNote,
+    isTrace,
+    logError,
+    logErrorIO,
+  )
+where
 
-    LogLevel(..), doLog, trace, traceIO, debug, debugIO, note, noteIO
-  , info, infoIO, warn, warnIO
-  , setLogLevel, getLogLevel, isVerbose, isDebug, isNote, isTrace
-  , logError, logErrorIO
-
-) where
-
-import Development.Shake
 import Control.Concurrent.MVar
 import Control.Monad
+import Development.Shake
 import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 
 data LogLevel = TRACE | DEBUG | INFO | NOTE | WARN | ERROR
-              deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 logLevelMVar :: MVar LogLevel
 logLevelMVar = unsafePerformIO (newMVar NOTE)
@@ -22,36 +37,40 @@ logLevelMVar = unsafePerformIO (newMVar NOTE)
 
 setLogLevel :: LogLevel -> IO ()
 setLogLevel ll =
-    modifyMVar_ logLevelMVar $ \_ -> return ll
+  modifyMVar_ logLevelMVar $ \_ -> return ll
 
 getLogLevel :: IO LogLevel
 getLogLevel =
-    readMVar logLevelMVar
+  readMVar logLevelMVar
 
 isNote :: IO Bool
 isNote =
-    do ll <- readMVar logLevelMVar
-       return $ ll <= NOTE
+  do
+    ll <- readMVar logLevelMVar
+    return $ ll <= NOTE
 
 isVerbose :: IO Bool
 isVerbose =
-    do ll <- readMVar logLevelMVar
-       return $ ll <= INFO
+  do
+    ll <- readMVar logLevelMVar
+    return $ ll <= INFO
 
 isDebug :: IO Bool
 isDebug =
-    do ll <- readMVar logLevelMVar
-       return $ ll <= DEBUG
+  do
+    ll <- readMVar logLevelMVar
+    return $ ll <= DEBUG
 
 isTrace :: IO Bool
 isTrace =
-    do ll <- readMVar logLevelMVar
-       return $ ll <= TRACE
+  do
+    ll <- readMVar logLevelMVar
+    return $ ll <= TRACE
 
 doLog :: LogLevel -> String -> IO ()
 doLog ll msg =
-    withMVar logLevelMVar $ \curLevel ->
-        when (ll >= curLevel) (hPutStrLn stderr msg >> hFlush stderr)
+  withMVar logLevelMVar $ \curLevel ->
+    when (ll >= curLevel) (hPutStrLn stderr msg >> hFlush stderr)
 
 trace :: String -> Action ()
 trace = liftIO . traceIO

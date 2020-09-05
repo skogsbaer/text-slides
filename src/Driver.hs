@@ -1,15 +1,16 @@
 {-# LANGUAGE MultiWayIf #-}
+
 module Driver (main) where
 
-import Types
 import BuildConfig
-import CoreRules
 import Cmdline
-import Logging
-import Development.Shake
-import System.FilePath
+import CoreRules
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Development.Shake
+import Logging
+import System.FilePath
+import Types
 
 -- | The version number of your build rules. Change the version number to force a complete
 -- rebuild, such as when making significant changes to the rules that require a wipe.
@@ -21,7 +22,7 @@ shakeProfileBaseFile = "shake-profile."
 
 shakeProfileFiles :: [FilePath]
 shakeProfileFiles =
-    map (\x -> shakeProfileBaseFile ++ x) ["html", "json", "trace"]
+  map (\x -> shakeProfileBaseFile ++ x) ["html", "json", "trace"]
 
 main :: IO ()
 main = do
@@ -36,11 +37,12 @@ main = do
   cfg <- getBuildConfig
   let args =
         BuildArgs
-        { ba_inputFile = co_inputFile opts }
+          { ba_inputFile = co_inputFile opts
+          }
       resolvedTargets =
         flip map (Set.toList (co_outputs opts)) $ \mode ->
-            bc_buildDir cfg </>
-            replaceExtension (co_inputFile opts) (T.unpack $ outputModeToExtension mode)
+          bc_buildDir cfg
+            </> replaceExtension (co_inputFile opts) (T.unpack $ outputModeToExtension mode)
   shake (mkShakeOptions cfg opts) $ do
     want resolvedTargets
     coreRules cfg args

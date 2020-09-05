@@ -1,40 +1,46 @@
-{-# OPTIONS_GHC -F -pgmF htfpp #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# OPTIONS_GHC -F -pgmF htfpp #-}
+
 module Test.Transform where
 
 import CoreRules
-import Types
-import Text.Heredoc
-import Test.Framework
 import qualified Data.Text as T
+import Test.Framework
+import Text.Heredoc
+import Types
 
 test_transform :: IO ()
 test_transform = do
-    out <- transformMarkdown (\_ -> return ()) plugins "<input>" sampleInput
-    assertEqual expected out
+  out <- transformMarkdown (\_ -> return ()) plugins "<input>" sampleInput
+  assertEqual expected out
   where
     keynote =
-        PluginConfig
-        { p_name = PluginName "keynote"
-        , p_kind = PluginWithoutBody
-        , p_rules = return ()
-        , p_expand = \call -> do
+      PluginConfig
+        { p_name = PluginName "keynote",
+          p_kind = PluginWithoutBody,
+          p_rules = return (),
+          p_expand = \call -> do
             file <- exceptInM $ getRequiredStringValue "file" (pc_args call)
             slide <- exceptInM $ getRequiredIntValue "slide" (pc_args call)
-            return $ "![](build/plugins/keynote/" <>
-                file <> "/" <> T.pack (show slide) <> ".jpg)"
+            return $
+              "![](build/plugins/keynote/"
+                <> file
+                <> "/"
+                <> T.pack (show slide)
+                <> ".jpg)"
         }
     python =
-        PluginConfig
-        { p_name = PluginName "python"
-        , p_kind = PluginWithBody
-        , p_rules = return ()
-        , p_expand = \call -> return $ "~~~python\n" <> pc_body call <> "\n~~~"
+      PluginConfig
+        { p_name = PluginName "python",
+          p_kind = PluginWithBody,
+          p_rules = return (),
+          p_expand = \call -> return $ "~~~python\n" <> pc_body call <> "\n~~~"
         }
     plugins = [keynote, python]
 
 sampleInput :: T.Text
-sampleInput = [here|
+sampleInput =
+  [here|
 ~~~keynote(file: "my_presentation.key", slide: 1)
 
 -- Source code --
@@ -46,7 +52,8 @@ print(foo(41))
 |]
 
 expected :: T.Text
-expected = [here|
+expected =
+  [here|
 ![](build/plugins/keynote/my_presentation.key/1.jpg)
 
 -- Source code --
