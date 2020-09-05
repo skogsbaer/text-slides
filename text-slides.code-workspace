@@ -1,0 +1,12 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "[haskell]": {
+            "editor.formatOnSave": true
+        }
+    }
+}
