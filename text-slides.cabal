@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a2a473bf298e4847a8b352cd09aeb9c1aab4bd3be29fff0f2ef61f00503510c7
+-- hash: d0787a0eda00257d48455da0b1b3a49fd8b75a876aec5878c261acdabe867b5e
 
 name:           text-slides
 version:        0.1
@@ -34,8 +34,8 @@ library
       Driver
       Logging
       Parser
+      Plugins.Code
       Plugins.Keynote
-      Plugins.Python
       Types
       Utils
   other-modules:

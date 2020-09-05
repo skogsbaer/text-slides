@@ -45,7 +45,7 @@ sequenceDiagram
 
 ## Source code (1)
 
-The following code is extracted to `build/code/slides.py`.
+The following code is extracted to `build/plugins/python/sample-talk.py`.
 Executing the code in the file runs all doctests.
 
 ~~~python
@@ -60,7 +60,7 @@ def foo(x):
 
 ## Source code (2)
 
-The following code is appended to `build/code/slides.py`
+The following code is appended to `build/plugins/python/sample-talk.py`
 
 ~~~python
 print(foo(41))

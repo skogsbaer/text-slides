@@ -5,7 +5,8 @@ module Driver (main) where
 import BuildConfig
 import Cmdline
 import CoreRules
-import qualified Data.Set as Set
+import qualified Data.List as L
+import qualified Data.Set as S
 import qualified Data.Text as T
 import Development.Shake
 import Logging
@@ -39,13 +40,15 @@ main = do
         BuildArgs
           { ba_inputFile = co_inputFile opts
           }
-      resolvedTargets =
-        flip map (Set.toList (co_outputs opts)) $ \mode ->
+      targets =
+        flip map (S.toList (co_outputs opts)) $ \mode ->
           bc_buildDir cfg
             </> replaceExtension (co_inputFile opts) (T.unpack $ outputModeToExtension mode)
+  noteIO $ "Welcome to text-slides. Bringing " ++ (L.intercalate ", " targets) ++ " up-to-date"
   shake (mkShakeOptions cfg opts) $ do
-    want resolvedTargets
+    want targets
     coreRules cfg args
+  noteIO $ "Everything is up-to-date now."
   where
     mkShakeOptions cfg opts =
       shakeOptions

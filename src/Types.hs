@@ -6,6 +6,7 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import Development.Shake
 import Safe
+import System.FilePath
 
 type Fail a = Either T.Text a
 
@@ -41,11 +42,16 @@ outputModeToExtension mode = "." <> showOutputMode mode
 data BuildArgs = BuildArgs
   {ba_inputFile :: FilePath}
 
+type PluginMap m = M.Map PluginName (PluginConfig m)
+
 data GenericBuildConfig m = BuildConfig
   { bc_buildDir :: FilePath,
     bc_pandoc :: FilePath,
-    bc_plugins :: [PluginConfig m]
+    bc_plugins :: PluginMap m
   }
+
+pluginDir :: GenericBuildConfig m -> PluginName -> FilePath
+pluginDir cfg plugin = bc_buildDir cfg </> "plugins" </> T.unpack (unPluginName plugin)
 
 type BuildConfig = GenericBuildConfig Action
 
@@ -122,7 +128,7 @@ getOptionalBoolValue k m =
 data PluginCall = PluginCall
   { pc_pluginName :: PluginName,
     pc_location :: T.Text,
-    pc_args :: (ArgMap),
+    pc_args :: ArgMap,
     pc_body :: T.Text
   }
   deriving (Eq, Show)
@@ -131,5 +137,6 @@ data PluginConfig action = PluginConfig
   { p_name :: PluginName,
     p_kind :: PluginKind,
     p_rules :: Rules (),
-    p_expand :: PluginCall -> ExceptT T.Text action T.Text
+    p_expand :: PluginCall -> ExceptT T.Text action T.Text,
+    p_forAllCalls :: BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
   }

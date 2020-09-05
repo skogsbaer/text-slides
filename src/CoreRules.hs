@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.Extra
 import Control.Monad.Trans.Except
 import qualified Data.Map.Strict as M
+import Data.Maybe
 import qualified Data.Text as T
 import Development.Shake
 import Logging
@@ -17,10 +18,11 @@ import Types
 import Utils
 
 runPandoc :: GenericBuildConfig m -> OutputMode -> FilePath -> FilePath -> Action ()
-runPandoc cfg mode inFile outFile = do
+runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
   need [inFile]
+  -- FIXME: extract dependencies
   let commonPandocArgs =
-        [ "--from=markdown",
+        [ "--from=json",
           "--slide-level=2",
           "--highlight-style=pygments",
           "--output=" ++ outFile
@@ -34,14 +36,33 @@ runPandoc cfg mode inFile outFile = do
             ]
           OutputPdf -> error "PDF not yet implemented"
       pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
-  mySystem NOTE (bc_pandoc cfg) pandocArgs
+  note ("Generating " ++ outFile)
+  mySystem INFO (bc_pandoc cfg) pandocArgs
+
+getKnownPlugin :: PluginName -> PluginMap m -> PluginConfig m
+getKnownPlugin pluginName pluginMap =
+  case M.lookup pluginName pluginMap of
+    Nothing ->
+      error $
+        "BUG: Plugin with name " ++ show pluginName ++ " missing in plugin map"
+    Just plugin -> plugin
 
 transformMarkdown ::
-  MonadFail m => (T.Text -> m ()) -> [PluginConfig m] -> FilePath -> T.Text -> m T.Text
-transformMarkdown warnFun plugins inFile md = do
+  MonadFail m =>
+  (T.Text -> m ()) ->
+  PluginMap m ->
+  FilePath ->
+  T.Text ->
+  m (T.Text, [PluginCall])
+transformMarkdown warnFun pluginMap inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
   lines <- mapMaybeM tokenToLine tokens
-  return $ T.unlines lines
+  let calls =
+        flip mapMaybe tokens $ \tok ->
+          case tok of
+            Line _ -> Nothing
+            Plugin call -> Just call
+  return $ (T.unlines lines, calls)
   where
     tokenToLine tok =
       case tok of
@@ -59,26 +80,39 @@ transformMarkdown warnFun plugins inFile md = do
                 Left err -> do
                   warnFun (pc_location call <> ": plugin call failed: " <> err)
                   return Nothing
-    pluginMap =
-      M.fromList $
-        flip map plugins $ \plugin -> (p_name plugin, plugin)
     pluginKindMap =
-      M.fromList $
-        flip map plugins $ \plugin -> (p_name plugin, p_kind plugin)
+      M.map p_kind pluginMap
 
-generateRawMarkdown :: BuildConfig -> FilePath -> FilePath -> Action ()
-generateRawMarkdown cfg inFile outFile = do
+generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
+generateRawMarkdown cfg args inFile outFile = do
   md <- myReadFile inFile
-  rawMd <- transformMarkdown (warn . T.unpack) (bc_plugins cfg) inFile md
-  -- FIXME: extract dependencies
+  (rawMd, calls) <- transformMarkdown (warn . T.unpack) (bc_plugins cfg) inFile md
+  let callMap = foldr (\call m -> M.insertWith (++) (pc_pluginName call) [call] m) M.empty calls
+  forM_ (M.toList callMap) $ \(pluginName, calls) -> do
+    res <- runExceptT $ p_forAllCalls (getKnownPlugin pluginName (bc_plugins cfg)) cfg args calls
+    case res of
+      Left err -> do
+        warn
+          ( "Processing all calls of plugin " ++ T.unpack (unPluginName pluginName)
+              ++ " failed: "
+              ++ T.unpack err
+          )
+      Right () -> return ()
   myWriteFile outFile rawMd
+
+generateJson :: BuildConfig -> FilePath -> FilePath -> Action ()
+generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
+  need [inFile]
+  mySystem INFO (bc_pandoc cfg) ["--from=markdown", "--output=" ++ outFile, inFile]
 
 coreRules :: BuildConfig -> BuildArgs -> Rules ()
 coreRules cfg args = do
-  forM_ [minBound .. maxBound] $ \mode ->
-    outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode raw
-  raw %> generateRawMarkdown cfg (ba_inputFile args)
-  sequence_ $ map p_rules (bc_plugins cfg)
+  forM_ [minBound .. maxBound :: OutputMode] $ \mode ->
+    outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode json
+  raw %> generateRawMarkdown cfg args (ba_inputFile args)
+  json %> generateJson cfg raw
+  sequence_ $ map (p_rules . snd) (M.toList (bc_plugins cfg))
   where
     outFile ext = bc_buildDir cfg </> replaceExtension (ba_inputFile args) ext
     raw = outFile ".mdraw"
+    json = outFile ".json"

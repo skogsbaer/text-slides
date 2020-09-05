@@ -5,6 +5,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Development.Shake
 import Logging
+import System.Directory
 import System.Exit
 import System.FilePath
 import System.Process
@@ -39,6 +40,7 @@ myWriteFile :: FilePath -> T.Text -> Action ()
 myWriteFile fp t =
   do
     debug ("Writing file " ++ fp)
+    liftIO $ createDirectoryIfMissing True (takeDirectory fp)
     let bs = T.encodeUtf8 t
     liftIO $ BS.writeFile fp bs
     debug ("Finished writing file " ++ fp)
