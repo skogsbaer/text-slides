@@ -1,3 +1,15 @@
+{-
+
+A plugin call such as
+
+~~~python
+BODY
+~~~
+
+simply places to same content in the markdown file. The p_forAllCalls action (invoked when
+generating the main output document) then writes to code snippets into the appropriate
+files.
+-}
 module Plugins.Code (codePlugins) where
 
 import Control.Monad

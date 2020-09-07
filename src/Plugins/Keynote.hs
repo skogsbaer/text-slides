@@ -2,6 +2,15 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
+{-
+
+Each call keynote(file: "presi.key", slide: 42) expands into a markdown reference to the
+image build/plugins/keynote/presi.key/slides/slide.042.jpeg. For each of such jpeg images,
+there is a build rule depending on build/plugins/keynote/presi.key/presentation.hash. The
+build rule for this hash file runs the export for all images and generates the hash file in
+the end.
+
+-}
 module Plugins.Keynote
   ( keynotePlugin,
     keynoteFileToBuildPath,
@@ -52,12 +61,9 @@ keynotePlugin =
       p_forAllCalls = processAllCalls
     }
 
--- | Convert a whole file path into a string that can be used as a path component, i.e.
--- the resulting string does slashes. This function is reversible (see singlePathComponentToPath)
--- and different pathes map to different strings.
-
--- relative path without ..    : just prefix the relative path with build/plugins/keynote/rel
--- relative path containing .. : strip leading slash and prefix with build/plugins/keynote/abs use
+-- | Convert a keynote file into a path in the build directory where the results of extracting
+-- the images of the presentation will be placed. The inverse of this function is
+-- `buildPathToKeynoteFile`.
 keynoteFileToBuildPath :: GenericBuildConfig m -> FilePath -> IO FilePath
 keynoteFileToBuildPath cfg (normalise -> keynoteFile) =
   normaliseEx <$> do
@@ -75,6 +81,7 @@ keynoteFileToBuildPath cfg (normalise -> keynoteFile) =
   where
     handleAbs topDir abs = topDir </> "abs" ++ abs
 
+-- | Inverse of `keynoteFileToBuildPath`
 buildPathToKeynoteFile :: GenericBuildConfig m -> FilePath -> Fail FilePath
 buildPathToKeynoteFile cfg (normalise -> fp) = do
   let topDir = pluginDir cfg keynotePluginName
@@ -96,16 +103,10 @@ slideImagePathToPresentationHashPath (normalise -> fp) =
           | otherwise -> Nothing
         _ -> Nothing
 
--- build/plugins/keynote/<my_presentation>/presentation.keyhash ~~>
--- path to <my_presentation>
-keynoteFileFromHashFile :: BuildConfig -> FilePath -> Fail FilePath
-keynoteFileFromHashFile cfg fp =
-  buildPathToKeynoteFile cfg (takeDirectory fp)
-
--- hashFile is some like build/plugins/keynote/<my_presentation>/presentation.keyhash
+-- hashFile is something like build/plugins/keynote/<my_presentation>/presentation.keyhash
 runKeynoteExport :: BuildConfig -> FilePath -> Action ()
 runKeynoteExport cfg hashFile = do
-  keyFile <- failInM $ keynoteFileFromHashFile cfg hashFile
+  keyFile <- failInM $ buildPathToKeynoteFile cfg (takeDirectory hashFile)
   dataDir <- liftIO getDataDir
   let script = keynoteExportScript dataDir
       outDir = takeDirectory hashFile
