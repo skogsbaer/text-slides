@@ -62,7 +62,7 @@ pluginCallP = do
       { pc_pluginName = name,
         pc_args = M.fromList args,
         pc_body = "",
-        pc_location = "?"
+        pc_location = unknownLocation
       }
   where
     argP = do
@@ -94,7 +94,7 @@ parsePluginCall :: String -> T.Text -> Fail PluginCall
 parsePluginCall location line =
   case P.parse (pluginCallP <* P.eof) location line of
     Left err -> Left $ T.pack (P.errorBundlePretty err)
-    Right x -> Right (x {pc_location = T.pack location})
+    Right x -> Right (x {pc_location = Location (T.pack location)})
 
 data ParseContext = ParseContext
   { pc_revTokens :: [Token],

@@ -15,13 +15,10 @@ import Utils
 data CodeArgs = CodeArgs
   {ca_file :: Maybe FilePath}
 
-parseArgs :: PluginName -> ArgMap -> Fail CodeArgs
-parseArgs plugin m = do
-  file <- case M.lookup "file" m of
-    Just (ArgString t) -> Right (Just (T.unpack t))
-    Just _ -> Left ("Argument file of plugin " <> unPluginName plugin <> " must be a string")
-    Nothing -> Right Nothing
-  return $ CodeArgs {ca_file = file}
+parseArgs :: PluginCall -> ArgMap -> Fail CodeArgs
+parseArgs call m = do
+  file <- getOptionalStringValue (pc_location call) "file" m
+  return $ CodeArgs {ca_file = fmap T.unpack file}
 
 mkCodePlugin :: PluginName -> LangConfig -> PluginConfig Action
 mkCodePlugin name cfg =
@@ -33,11 +30,11 @@ mkCodePlugin name cfg =
       p_forAllCalls = processAllCalls cfg
     }
 
-pluginRules :: Rules ()
-pluginRules = return ()
+pluginRules :: BuildConfig -> BuildArgs -> Rules ()
+pluginRules _cfg _args = return ()
 
-runPlugin :: PluginCall -> ExceptT T.Text Action T.Text
-runPlugin call =
+runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.Text
+runPlugin _cfg _buildArgs call =
   return ("~~~" <> unPluginName (pc_pluginName call) <> "\n" <> pc_body call <> "\n~~~")
 
 processAllCalls ::
@@ -53,7 +50,7 @@ processAllCalls langCfg cfg buildArgs calls = do
       return $ M.insertWith (\new old -> old <> "\n\n" <> new) file code m
     codeFromCall :: PluginCall -> Fail (FilePath, T.Text)
     codeFromCall call = do
-      args <- parseArgs (pc_pluginName call) (pc_args call)
+      args <- parseArgs call (pc_args call)
       let baseFile =
             case ca_file args of
               Nothing -> replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
@@ -69,8 +66,8 @@ data LangConfig = LangConfig
     lc_commentEnd :: Maybe T.Text
   }
 
-lineComment :: LangConfig -> T.Text -> T.Text
-lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg) <> "\n"
+lineComment :: LangConfig -> Location -> T.Text
+lineComment cfg l = lc_commentStart cfg <> unLocation l <> fromMaybe "" (lc_commentEnd cfg) <> "\n"
 
 codePlugins :: [PluginConfig Action]
 codePlugins = flip map languages $ \(name, langCfg) ->

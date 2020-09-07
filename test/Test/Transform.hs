@@ -6,35 +6,44 @@ module Test.Transform where
 import CoreRules
 import qualified Data.Text as T
 import Test.Framework
+import Test.TestBuildConfig
 import Text.Heredoc
 import Types
 
 test_transform :: IO ()
 test_transform = do
-  out <- transformMarkdown (\_ -> return ()) plugins "<input>" sampleInput
+  (out, _) <-
+    transformMarkdown
+      (\_ -> return ())
+      (testBuildConfig plugins)
+      testBuildArgs
+      "<input>"
+      sampleInput
   assertEqual expected out
   where
     keynote =
       PluginConfig
         { p_name = PluginName "keynote",
           p_kind = PluginWithoutBody,
-          p_rules = return (),
-          p_expand = \call -> do
-            file <- exceptInM $ getRequiredStringValue "file" (pc_args call)
-            slide <- exceptInM $ getRequiredIntValue "slide" (pc_args call)
+          p_rules = \_cfg _args -> return (),
+          p_expand = \_cfg _args call -> do
+            file <- exceptInM $ getRequiredStringValue unknownLocation "file" (pc_args call)
+            slide <- exceptInM $ getRequiredIntValue unknownLocation "slide" (pc_args call)
             return $
               "![](build/plugins/keynote/"
                 <> file
                 <> "/"
                 <> T.pack (show slide)
-                <> ".jpg)"
+                <> ".jpg)",
+          p_forAllCalls = \_cfg _args _ -> return ()
         }
     python =
       PluginConfig
         { p_name = PluginName "python",
           p_kind = PluginWithBody,
-          p_rules = return (),
-          p_expand = \call -> return $ "~~~python\n" <> pc_body call <> "\n~~~"
+          p_rules = \_cfg _args -> return (),
+          p_expand = \_cfg _args call -> return $ "~~~python\n" <> pc_body call <> "\n~~~",
+          p_forAllCalls = \_cfg _args _ -> return ()
         }
     plugins = [keynote, python]
 

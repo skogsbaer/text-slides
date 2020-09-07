@@ -41,7 +41,7 @@ sequenceDiagram
 
 ## Diagrams with keynote
 
-~~~keynote(file: „my_presentation.key“, slide: 1)
+~~~keynote(file: "my_presentation.key", slide: 2)
 
 ## Source code (1)
 

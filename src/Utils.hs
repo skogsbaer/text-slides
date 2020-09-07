@@ -1,6 +1,8 @@
 module Utils where
 
+import qualified Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Base16
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Development.Shake
@@ -44,3 +46,24 @@ myWriteFile fp t =
     let bs = T.encodeUtf8 t
     liftIO $ BS.writeFile fp bs
     debug ("Finished writing file " ++ fp)
+
+showText :: Show a => a -> T.Text
+showText = T.pack . show
+
+newtype Hash = Hash {unHash :: T.Text}
+  deriving (Eq, Ord, Show)
+
+md5OfFile :: FilePath -> IO Hash
+md5OfFile fp = do
+  bs <- BS.readFile fp
+  let h = MD5.hash bs
+  return (Hash $ T.decodeUtf8 $ Base16.encode h)
+
+needWithHash :: FilePath -> Action Hash
+needWithHash fp = do
+  need [fp]
+  h <- liftIO $ md5OfFile fp
+  return h
+
+isJpegFile :: FilePath -> Bool
+isJpegFile fp = takeExtension fp `elem` [".jpg", ".jpeg"]

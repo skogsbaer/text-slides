@@ -29,7 +29,7 @@ test_parsePluginCall = do
         }
     )
   where
-    loc = "<input>"
+    loc = Location "<input>"
     check input expected =
       assertEqual (Right expected) (parsePluginCall "<input>" input)
 
@@ -47,7 +47,7 @@ test_parse = do
         Plugin $
           PluginCall
             (PluginName "keynote")
-            "<input>:2"
+            (Location "<input>:2")
             ( M.fromList
                 [ ("file", ArgString "my_presentation.key"),
                   ("slide", ArgInt 1)
@@ -56,7 +56,7 @@ test_parse = do
             "",
         Line "",
         Line "-- Source code --",
-        Plugin $ PluginCall (PluginName "python") "<input>:5" M.empty "print(foo(41))",
+        Plugin $ PluginCall (PluginName "python") (Location "<input>:5") M.empty "print(foo(41))",
         Line "",
         Line "~~~foo"
       ]

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d0787a0eda00257d48455da0b1b3a49fd8b75a876aec5878c261acdabe867b5e
+-- hash: d9bbea295672dc98a65ca05a148a342257d83f52207c55387a80e3653a88119f
 
 name:           text-slides
 version:        0.1
@@ -21,6 +21,8 @@ build-type:     Simple
 extra-source-files:
     LICENSE
     README.md
+data-files:
+    data/keynote-export.py
 
 source-repository head
   type: git
@@ -47,8 +49,10 @@ library
   build-depends:
       QuickCheck
     , base
+    , base16-bytestring
     , bytestring
     , containers
+    , cryptohash-md5
     , directory
     , exceptions
     , extra
@@ -83,7 +87,9 @@ test-suite unit-tests
   type: exitcode-stdio-1.0
   main-is: Tests.hs
   other-modules:
+      Test.Keynote
       Test.Parser
+      Test.TestBuildConfig
       Test.Transform
       Paths_text_slides
   hs-source-dirs:
@@ -96,7 +102,9 @@ test-suite unit-tests
       HTF
     , base
     , containers
+    , directory
     , extra
+    , filepath
     , heredoc
     , safe
     , text

@@ -2,6 +2,8 @@ cradle:
   stack:
     - path: "./src"
       component: "text-slides:lib"
+    - path: "./.stack-work"
+      component: "text-slides:lib"
     - path: "./test"
       component: "text-slides:test:unit-tests"
     - path: "./app"

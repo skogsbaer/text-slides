@@ -7,6 +7,7 @@ import Test.Framework
 import Test.Framework.TestManager
 {- In Emacs sort block with M-x sort-lines #-}
 {- In Vim sort block with V}:sort #-}
+import {-@ HTF_TESTS @-} Test.Keynote
 import {-@ HTF_TESTS @-} Test.Parser
 import {-@ HTF_TESTS @-} Test.Transform
 

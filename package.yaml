@@ -13,14 +13,17 @@ category:     Development
 extra-source-files:
   - LICENSE
   - README.md
+data-files: data/*
 
 library:
   source-dirs: src
   dependencies:
     - QuickCheck
     - base
+    - base16-bytestring
     - bytestring
     - containers
+    - cryptohash-md5
     - directory
     - exceptions
     - extra
@@ -51,7 +54,9 @@ tests:
     dependencies:
       - base
       - containers
+      - directory
       - extra
+      - filepath
       - heredoc
       - HTF
       - safe

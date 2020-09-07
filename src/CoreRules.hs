@@ -50,11 +50,12 @@ getKnownPlugin pluginName pluginMap =
 transformMarkdown ::
   MonadFail m =>
   (T.Text -> m ()) ->
-  PluginMap m ->
+  GenericBuildConfig m ->
+  BuildArgs ->
   FilePath ->
   T.Text ->
   m (T.Text, [PluginCall])
-transformMarkdown warnFun pluginMap inFile md = do
+transformMarkdown warnFun cfg buildArgs inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
   lines <- mapMaybeM tokenToLine tokens
   let calls =
@@ -68,25 +69,25 @@ transformMarkdown warnFun pluginMap inFile md = do
       case tok of
         Line t -> return (Just t)
         Plugin call ->
-          case M.lookup (pc_pluginName call) pluginMap of
+          case M.lookup (pc_pluginName call) (bc_plugins cfg) of
             Nothing ->
               error $
                 "BUG: Plugin call " ++ show call
                   ++ " present after parsing but plugin not in plugin map"
             Just plugin -> do
-              pluginRes <- runExceptT $ p_expand plugin call
+              pluginRes <- runExceptT $ p_expand plugin cfg buildArgs call
               case pluginRes of
                 Right t -> return (Just t)
                 Left err -> do
-                  warnFun (pc_location call <> ": plugin call failed: " <> err)
+                  warnFun (unLocation (pc_location call) <> ": plugin call failed: " <> err)
                   return Nothing
     pluginKindMap =
-      M.map p_kind pluginMap
+      M.map p_kind (bc_plugins cfg)
 
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
   md <- myReadFile inFile
-  (rawMd, calls) <- transformMarkdown (warn . T.unpack) (bc_plugins cfg) inFile md
+  (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args inFile md
   let callMap = foldr (\call m -> M.insertWith (++) (pc_pluginName call) [call] m) M.empty calls
   forM_ (M.toList callMap) $ \(pluginName, calls) -> do
     res <- runExceptT $ p_forAllCalls (getKnownPlugin pluginName (bc_plugins cfg)) cfg args calls
@@ -111,7 +112,7 @@ coreRules cfg args = do
     outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode json
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
-  sequence_ $ map (p_rules . snd) (M.toList (bc_plugins cfg))
+  sequence_ $ map (\(_, p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
   where
     outFile ext = bc_buildDir cfg </> replaceExtension (ba_inputFile args) ext
     raw = outFile ".mdraw"
