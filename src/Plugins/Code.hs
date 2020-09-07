@@ -37,7 +37,8 @@ pluginRules :: Rules ()
 pluginRules = return ()
 
 runPlugin :: PluginCall -> ExceptT T.Text Action T.Text
-runPlugin call = return (pc_body call)
+runPlugin call =
+  return ("~~~" <> unPluginName (pc_pluginName call) <> "\n" <> pc_body call <> "\n~~~")
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
