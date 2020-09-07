@@ -49,6 +49,7 @@ data GenericBuildConfig m = BuildConfig
   { bc_buildDir :: FilePath,
     bc_pandoc :: FilePath,
     bc_python :: FilePath, -- python 3
+    bc_convert :: FilePath, -- imagemagick
     bc_plugins :: PluginMap m
   }
 

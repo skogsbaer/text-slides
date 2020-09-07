@@ -18,6 +18,7 @@ module Plugins.Keynote
   )
 where
 
+import Control.Monad
 import Control.Monad.Trans.Except
 import qualified Data.List as L
 import Data.Maybe
@@ -115,6 +116,10 @@ runKeynoteExport cfg hashFile = do
   hash <- needWithHash keyFile
   let exportArgs = [script, "-k", keyFile, "-o", outDir]
   mySystem INFO (bc_python cfg) exportArgs
+  jpegs <- liftIO $ myListDirectory (outDir </> "slides") isJpegFile
+  forM_ jpegs $ \jpeg ->
+    let (d, f) = splitFileName jpeg
+     in mySystem INFO (bc_convert cfg) [jpeg, "-trim", d </> ("trimmed_" ++ f)]
   myWriteFile hashFile (unHash hash)
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
@@ -130,7 +135,7 @@ runPlugin cfg _buildArgs call = do
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
   -- all output files are place directly in the build directory
   let relDir = makeRelative (bc_buildDir cfg) dir
-      imgFile = relDir </> "slides" </> printf "slides.%03d.jpeg" (ka_slide args)
+      imgFile = relDir </> "slides" </> printf "trimmed_slides.%03d.jpeg" (ka_slide args)
   return $ "![](" <> T.pack imgFile <> ")"
 
 processAllCalls ::

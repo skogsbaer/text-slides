@@ -18,6 +18,7 @@ defaultBuildConfig =
     { bc_buildDir = "build",
       bc_pandoc = "pandoc",
       bc_python = "python3",
+      bc_convert = "convert",
       bc_plugins = M.fromList $ map (\p -> (p_name p, p)) allPlugins
     }
 

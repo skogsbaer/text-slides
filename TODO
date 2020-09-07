@@ -1,7 +1,2 @@
-- Basic dependency wiring
-  - from .md to .raw to .html or .pdf
-  - build rules
-  - omit plugin calls
-- Expand plugin calls
-- Extract dependencies via pandoc filters
-- Inject build rules of plugins
+- Trim images: `convert slides.002.jpeg -trim out.jpeg`
+- Implement support for mermaid

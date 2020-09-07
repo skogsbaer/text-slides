@@ -67,3 +67,8 @@ needWithHash fp = do
 
 isJpegFile :: FilePath -> Bool
 isJpegFile fp = takeExtension fp `elem` [".jpg", ".jpeg"]
+
+myListDirectory :: FilePath -> (FilePath -> Bool) -> IO [FilePath]
+myListDirectory dir pred = do
+  fs <- listDirectory dir
+  return (map (\x -> dir </> x) (filter pred fs))
