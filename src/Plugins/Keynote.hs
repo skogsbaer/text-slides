@@ -119,7 +119,7 @@ runKeynoteExport cfg hashFile = do
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg _args = do
   isKeynoteJpeg ?> \jpg -> need [fromJust (slideImagePathToPresentationHashPath jpg)]
-  "presentation.keyhash" %> runKeynoteExport cfg
+  "//presentation.keyhash" %> runKeynoteExport cfg
   where
     isKeynoteJpeg fp = isJust (slideImagePathToPresentationHashPath fp)
 
@@ -127,7 +127,9 @@ runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.T
 runPlugin cfg _buildArgs call = do
   args <- exceptInM $ parseArgs call
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
-  let imgFile = dir </> "slides" </> printf "slides.%03d.jpeg" (ka_slide args)
+  -- all output files are place directly in the build directory
+  let relDir = makeRelative (bc_buildDir cfg) dir
+      imgFile = relDir </> "slides" </> printf "slides.%03d.jpeg" (ka_slide args)
   return $ "![](" <> T.pack imgFile <> ")"
 
 processAllCalls ::

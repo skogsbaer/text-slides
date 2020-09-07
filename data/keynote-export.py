@@ -161,7 +161,6 @@ def main():
     opts = Options(args.outdir, pagesize, args.font_size, args.title,
                    args.twitter_username, args.skip_builds)
 
-    print('Processing', args.keynote)
     make_dirs(opts)
     notes = export_keynote(args.keynote, opts)
     #generate_pdf(opts, notes)

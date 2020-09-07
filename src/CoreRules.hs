@@ -1,15 +1,20 @@
 module CoreRules
   ( coreRules,
     transformMarkdown,
+    mainOutputFile,
   )
 where
 
 import Control.Monad
 import Control.Monad.Extra
 import Control.Monad.Trans.Except
+import qualified Data.Aeson as J
+import qualified Data.HashMap.Strict as Hm
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Development.Shake
 import Logging
 import Parser
@@ -17,10 +22,50 @@ import System.FilePath
 import Types
 import Utils
 
+getDependenciesFromPandocJson :: FilePath -> IO [FilePath]
+getDependenciesFromPandocJson inFile = do
+  jsonValue <-
+    J.eitherDecodeFileStrict' inFile >>= \res ->
+      case res of
+        Right x -> return x
+        Left s -> fail ("Cannot parse JSON file " ++ inFile ++ ": " ++ s)
+  let deps = extractDeps jsonValue S.empty
+  return (S.toList deps)
+  where
+    -- We parse the JSON explicitly instead of relying on pandoc-types.
+    -- Reason: pandoc-types must must the version of the pandoc binary installed
+    -- on your system
+    extractDeps :: J.Value -> S.Set FilePath -> S.Set FilePath
+    extractDeps val acc =
+      case val of
+        J.Object hm ->
+          case (Hm.lookup "t" hm, Hm.lookup "c" hm) of
+            (Just "Image", Just (J.Array args)) ->
+              case getDepFromImageArgs args of
+                Just t -> S.insert t acc
+                Nothing -> acc
+            _ -> foldr extractDeps acc (Hm.elems hm)
+        J.Array values -> foldr extractDeps acc (V.toList values)
+        _ -> acc
+    getDepFromImageArgs :: V.Vector J.Value -> Maybe FilePath
+    getDepFromImageArgs args
+      | V.length args >= 3 =
+        let arg = args V.! 2
+         in case arg of
+              J.Array subArgs
+                | V.length subArgs >= 1 ->
+                  case subArgs V.! 0 of
+                    J.String t -> Just (T.unpack t)
+                    _ -> Nothing
+              _ -> Nothing
+      | otherwise = Nothing
+
 runPandoc :: GenericBuildConfig m -> OutputMode -> FilePath -> FilePath -> Action ()
 runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
   need [inFile]
-  -- FIXME: extract dependencies
+  deps <- liftIO $ getDependenciesFromPandocJson inFile
+  -- The deps are relative to the build dir
+  need (map (\x -> bc_buildDir cfg </> x) deps)
   let commonPandocArgs =
         [ "--from=json",
           "--slide-level=2",
@@ -114,6 +159,13 @@ coreRules cfg args = do
   json %> generateJson cfg raw
   sequence_ $ map (\(_, p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
   where
-    outFile ext = bc_buildDir cfg </> replaceExtension (ba_inputFile args) ext
+    outFile ext = mainOutputFile cfg args ext
     raw = outFile ".mdraw"
     json = outFile ".json"
+
+-- To keep things simple, the output file for the presentation is always placed at the
+-- toplevel of the build dir. This means, that two input files must not have the same
+-- basename.
+mainOutputFile :: BuildConfig -> BuildArgs -> String -> FilePath
+mainOutputFile cfg args ext =
+  bc_buildDir cfg </> takeBaseName (ba_inputFile args) <.> ext

@@ -42,8 +42,7 @@ main = do
           }
       targets =
         flip map (S.toList (co_outputs opts)) $ \mode ->
-          bc_buildDir cfg
-            </> replaceExtension (co_inputFile opts) (T.unpack $ outputModeToExtension mode)
+          mainOutputFile cfg args (T.unpack $ outputModeToExtension mode)
   noteIO $ "Welcome to text-slides. Bringing " ++ (L.intercalate ", " targets) ++ " up-to-date"
   shake (mkShakeOptions cfg opts) $ do
     want targets

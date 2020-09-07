@@ -18,6 +18,7 @@ data-files: data/*
 library:
   source-dirs: src
   dependencies:
+    - aeson
     - QuickCheck
     - base
     - base16-bytestring
@@ -38,7 +39,9 @@ library:
     - text
     - time
     - transformers
+    - unordered-containers
     - unix
+    - vector
 
 executable:
   main: Main.hs
