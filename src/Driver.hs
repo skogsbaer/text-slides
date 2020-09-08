@@ -4,12 +4,15 @@ module Driver (main) where
 
 import BuildConfig
 import Cmdline
+import Control.Monad
 import CoreRules
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text as T
-import Development.Shake
+import Development.Shake hiding (doesFileExist)
 import Logging
+import System.Directory
+import System.Exit
 import System.FilePath
 import Types
 
@@ -28,6 +31,10 @@ shakeProfileFiles =
 main :: IO ()
 main = do
   opts <- parseCmdlineArgs
+  exists <- doesFileExist (co_inputFile opts)
+  when (not exists) $ do
+    putStrLn $ "Input file " ++ co_inputFile opts ++ " does not exist, aborting!"
+    exitWith (ExitFailure 1)
   let logLevel =
         if
             | co_debug opts -> DEBUG
