@@ -61,12 +61,10 @@ mermaidPlugin =
     }
 
 runMermaid :: BuildConfig -> BuildArgs -> FilePath -> Action ()
-runMermaid cfg buildArgs outFile = do
+runMermaid cfg _buildArgs outFile = do
   let jsonFile = replaceExtension outFile ".json"
       mddFile = replaceExtension outFile ".mdd"
-  -- don't call need on the .json or the .mdd file. There is no rule generating these files.
-  -- They are produced as by-products when generating the .mdraw file.
-  need [mdRawOutputFile cfg buildArgs]
+  need [jsonFile, mddFile]
   json <- liftIO $ BSL.readFile jsonFile
   case J.decode' json of
     Nothing ->
@@ -82,6 +80,8 @@ runMermaid cfg buildArgs outFile = do
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do
   (pluginDir cfg mermaidPluginName) ++ "/*.png" %> runMermaid cfg args
+  (pluginDir cfg mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile cfg args]
+  (pluginDir cfg mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile cfg args]
 
 data MermaidCall = MermaidCall
   { mc_where :: T.Text,
