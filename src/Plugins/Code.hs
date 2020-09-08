@@ -29,8 +29,11 @@ data CodeArgs = CodeArgs
 
 parseArgs :: PluginCall -> ArgMap -> Fail CodeArgs
 parseArgs call m = do
-  file <- getOptionalStringValue (pc_location call) "file" m
+  file <- getOptionalStringValue loc "file" m
+  checkForSpuriousArgs loc m ["file"]
   return $ CodeArgs {ca_file = fmap T.unpack file}
+  where
+    loc = pc_location call
 
 mkCodePlugin :: PluginName -> LangConfig -> PluginConfig Action
 mkCodePlugin name cfg =

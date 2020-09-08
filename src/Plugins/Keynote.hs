@@ -44,6 +44,7 @@ parseArgs :: PluginCall -> Fail KeynoteArgs
 parseArgs call = do
   ka_file <- T.unpack <$> getRequiredStringValue loc "file" argMap
   ka_slide <- getRequiredIntValue loc "slide" argMap
+  checkForSpuriousArgs loc argMap ["file", "slide"]
   return KeynoteArgs {..}
   where
     loc = pc_location call

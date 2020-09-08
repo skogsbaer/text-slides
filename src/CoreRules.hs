@@ -2,6 +2,7 @@ module CoreRules
   ( coreRules,
     transformMarkdown,
     mainOutputFile,
+    mdRawOutputFile,
   )
 where
 
@@ -160,8 +161,11 @@ coreRules cfg args = do
   sequence_ $ map (\(_, p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
   where
     outFile ext = mainOutputFile cfg args ext
-    raw = outFile ".mdraw"
+    raw = outFile mdRawExt
     json = outFile ".json"
+
+mdRawExt :: String
+mdRawExt = ".mdraw"
 
 -- To keep things simple, the output file for the presentation is always placed at the
 -- toplevel of the build dir. This means, that two input files must not have the same
@@ -169,3 +173,6 @@ coreRules cfg args = do
 mainOutputFile :: BuildConfig -> BuildArgs -> String -> FilePath
 mainOutputFile cfg args ext =
   bc_buildDir cfg </> takeBaseName (ba_inputFile args) <.> ext
+
+mdRawOutputFile :: BuildConfig -> BuildArgs -> FilePath
+mdRawOutputFile cfg args = mainOutputFile cfg args mdRawExt

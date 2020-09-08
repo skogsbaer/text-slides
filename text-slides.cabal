@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5b0b16c9400229f8cce0da16522f0033067a87c986910f11b23fc9bedbadc44d
+-- hash: 2449d28bcf6f716520d0f595ae566e5fbb627bedfed813e8909258b0c610436f
 
 name:           text-slides
 version:        0.1
@@ -38,6 +38,7 @@ library
       Parser
       Plugins.Code
       Plugins.Keynote
+      Plugins.Mermaid
       Types
       Utils
   other-modules:
@@ -65,6 +66,7 @@ library
     , safe
     , shake
     , shell-escape
+    , temporary
     , text
     , time
     , transformers

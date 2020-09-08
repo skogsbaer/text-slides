@@ -25,7 +25,7 @@ $$
 
 ## Flowcharts with mermaid
 
-~~~marmaid
+~~~mermaid
 sequenceDiagram
     participant Alice
     participant Bob

@@ -53,11 +53,19 @@ showText = T.pack . show
 newtype Hash = Hash {unHash :: T.Text}
   deriving (Eq, Ord, Show)
 
+md5OfByteString :: BS.ByteString -> Hash
+md5OfByteString bs =
+  let h = MD5.hash bs
+   in Hash $ T.decodeUtf8 $ Base16.encode h
+
+md5OfText :: T.Text -> Hash
+md5OfText t =
+  md5OfByteString (T.encodeUtf8 t)
+
 md5OfFile :: FilePath -> IO Hash
 md5OfFile fp = do
   bs <- BS.readFile fp
-  let h = MD5.hash bs
-  return (Hash $ T.decodeUtf8 $ Base16.encode h)
+  return $ md5OfByteString bs
 
 needWithHash :: FilePath -> Action Hash
 needWithHash fp = do

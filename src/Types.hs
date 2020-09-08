@@ -3,6 +3,7 @@ module Types where
 import Control.Monad.Trans.Except
 import qualified Data.List as L
 import qualified Data.Map as M
+import qualified Data.Set as S
 import qualified Data.Text as T
 import Development.Shake
 import Safe
@@ -50,6 +51,7 @@ data GenericBuildConfig m = BuildConfig
     bc_pandoc :: FilePath,
     bc_python :: FilePath, -- python 3
     bc_convert :: FilePath, -- imagemagick
+    bc_mermaid :: FilePath,
     bc_plugins :: PluginMap m
   }
 
@@ -128,6 +130,18 @@ getOptionalBoolValue :: Location -> T.Text -> ArgMap -> Fail (Maybe Bool)
 getOptionalBoolValue l k m =
   getOptionalValue l k m "Bool" asBool
 
+checkForSpuriousArgs :: Location -> ArgMap -> [T.Text] -> Fail ()
+checkForSpuriousArgs loc m ks =
+  let presentKeys = M.keysSet m
+      supportedKeys = S.fromList ks
+      unsupportedKeys = presentKeys `S.difference` supportedKeys
+   in if S.null unsupportedKeys
+        then Right ()
+        else
+          Left $
+            unLocation loc <> ": Unkown argument keys: "
+              <> (T.intercalate ", " (S.toList unsupportedKeys))
+
 newtype Location = Location {unLocation :: T.Text}
   deriving (Eq, Show)
 
@@ -145,7 +159,9 @@ data PluginCall = PluginCall
 data PluginConfig action = PluginConfig
   { p_name :: PluginName,
     p_kind :: PluginKind,
+    -- | Called in the conversion step .md ~~> .mdraw
     p_rules :: GenericBuildConfig action -> BuildArgs -> Rules (),
+    -- | Called in the conversion step .md ~~> .mdraw
     p_expand ::
       GenericBuildConfig action ->
       BuildArgs ->
@@ -155,5 +171,5 @@ data PluginConfig action = PluginConfig
       GenericBuildConfig action ->
       BuildArgs ->
       [PluginCall] ->
-      ExceptT T.Text Action ()
+      ExceptT T.Text action ()
   }
