@@ -29,6 +29,7 @@ showOutputModes modes =
 
 data CmdlineOpts = CmdlineOpts
   { co_inputFile :: !FilePath,
+    co_beamerHeader :: Maybe FilePath,
     co_outputs :: !(Set.Set OutputMode),
     co_debug :: !Bool,
     co_verbose :: !Bool,
@@ -65,6 +66,16 @@ cmdlineOptsParser = do
         <> metavar "N"
         <> help "Set number of jobs"
         <> value 2
+  co_beamerHeader <-
+    optional $
+      option str $
+        long "beamer-header"
+          <> metavar "FILE"
+          <> help
+            ( "File to insert into the header of a beamer presenation. Can also be set by "
+                ++ "placing the file beamer-header.tex next to the input file or inside "
+                ++ "$HOME/.text-slides."
+            )
   -- inputFile should come last
   co_inputFile <-
     strArgument $

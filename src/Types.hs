@@ -52,8 +52,10 @@ data GenericBuildConfig m = BuildConfig
     bc_python :: FilePath, -- python 3
     bc_convert :: FilePath, -- imagemagick
     bc_mermaid :: FilePath,
+    bc_beamerHeader :: Maybe FilePath,
     bc_plugins :: PluginMap m
   }
+  deriving (Show)
 
 pluginDir :: GenericBuildConfig m -> PluginName -> FilePath
 pluginDir cfg plugin = bc_buildDir cfg </> "plugins" </> T.unpack (unPluginName plugin)
@@ -196,3 +198,11 @@ data PluginConfig action = PluginConfig
       [PluginCall] ->
       ExceptT T.Text action ()
   }
+
+instance Show (PluginConfig a) where
+  showsPrec p cfg =
+    showParen (p > 10) $
+      showString "PluginConfig "
+        . showsPrec 11 (p_name cfg)
+        . showString " "
+        . showsPrec 11 (p_kind cfg)

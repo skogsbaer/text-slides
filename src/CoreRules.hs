@@ -73,16 +73,23 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
           "--highlight-style=pygments",
           "--output=" ++ outFile
         ]
-      modePandocArgs =
-        case mode of
-          OutputHtml ->
-            [ "--to=slidy",
-              "--mathjax",
-              "--standalone"
-            ]
-          OutputPdf ->
-            ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
-      pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
+  modePandocArgs <-
+    case mode of
+      OutputHtml ->
+        return
+          [ "--to=slidy",
+            "--mathjax",
+            "--standalone"
+          ]
+      OutputPdf -> do
+        forM_ (bc_beamerHeader cfg) $ \x -> need [x]
+        return $
+          ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
+            ++ ( case bc_beamerHeader cfg of
+                   Just f -> ["--include-in-header=" ++ f]
+                   Nothing -> []
+               )
+  let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO (bc_pandoc cfg) pandocArgs
 
