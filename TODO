@@ -1,2 +1,2 @@
-- Trim images: `convert slides.002.jpeg -trim out.jpeg`
-- Implement support for mermaid
+- Document plugin args
+- More plugin args for code plugin
