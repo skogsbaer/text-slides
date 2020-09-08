@@ -80,7 +80,8 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
               "--mathjax",
               "--standalone"
             ]
-          OutputPdf -> error "PDF not yet implemented"
+          OutputPdf ->
+            ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
       pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO (bc_pandoc cfg) pandocArgs
