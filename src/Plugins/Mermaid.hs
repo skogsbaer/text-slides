@@ -73,7 +73,10 @@ runMermaid cfg _buildArgs outFile = do
             ++ "Try to remove the build directory"
         )
     Just mermaidCall -> do
-      note ("Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall))
+      note
+        ( "Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall) ++ " to produce "
+            ++ outFile
+        )
       let args = map T.unpack (mc_args mermaidCall) ++ ["--input", mddFile, "--output", outFile]
       mySystem INFO (bc_mermaid cfg) args
 
@@ -101,7 +104,7 @@ runPlugin cfg _buildArgs call = do
           { mc_args = toArg "--width" (ma_width args) ++ toArg "--height" (ma_height args),
             mc_where = unLocation (pc_location call)
           }
-      hash = md5OfText (showText mermaidCall)
+      hash = md5OfText (showText mermaidCall <> pc_body call)
       outDir = pluginDir cfg mermaidPluginName
       outFile ext =
         pluginDir cfg mermaidPluginName </> T.unpack (unHash hash) <.> ext
