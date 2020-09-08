@@ -82,8 +82,9 @@ text-slides.
 All code plugins support the following arguments:
 
 * `file` (optional string): the path where the extracted code is placed. Default:
-`build/YOUR_PRESENTATION.EXT`, where your presentation is placed in the file
-`YOUR_PRESENTATION.md` and `EXT` is the extension of the language you have choosen.
+`YOUR_PRESENTATION.EXT` if your presentation is placed in the file
+`YOUR_PRESENTATION.md` and `EXT` is the extension of the language you have choosen. The
+path is interpreted relative to `build/plugins/LANGUAGE`.
 * `mode` (optional string): one of `"show"`, `"hide"` or `"showOnly"`. The default is `"show"`: the
 code is displayed on the slides and extracted. Mode `"hide"` extracts the code but does not
 show it on the slides, `"showOnly"` shows the code on the slides but does not extract it.
@@ -91,12 +92,12 @@ show it on the slides, `"showOnly"` shows the code on the slides but does not ex
 #### Example
 
 ```
-~~~python(file: "build/foo.py", mode: "hide")
+~~~python(file: "foo.py", mode: "hide")
 print("Hello World!")
 ~~~
 ```
 
-Writes the code the `build/foo.py` and hides it from the presentation.
+Writes the code the `build/plugins/python/foo.py` and hides it from the presentation.
 
 ### keynote
 

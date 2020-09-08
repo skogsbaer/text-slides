@@ -114,6 +114,29 @@ getOptionalStringValue :: Location -> T.Text -> ArgMap -> Fail (Maybe T.Text)
 getOptionalStringValue l k m =
   getOptionalValue l k m "String" asString
 
+checkEnum :: Location -> T.Text -> [T.Text] -> T.Text -> Fail ()
+checkEnum loc k allowed v =
+  if v `elem` allowed
+    then return ()
+    else
+      Left $
+        unLocation loc <> ": invalid value for key " <> k <> ", allowed are only "
+          <> T.intercalate ", " allowed
+
+getRequiredEnumValue :: Location -> T.Text -> [T.Text] -> ArgMap -> Fail T.Text
+getRequiredEnumValue l k values m = do
+  v <- getRequiredValue l k m "String" asString
+  checkEnum l k values v
+  return v
+
+getOptionalEnumValue :: Location -> T.Text -> [T.Text] -> ArgMap -> Fail (Maybe T.Text)
+getOptionalEnumValue l k values m = do
+  mv <- getOptionalValue l k m "String" asString
+  case mv of
+    Nothing -> return ()
+    Just v -> checkEnum l k values v
+  return mv
+
 getRequiredIntValue :: Location -> T.Text -> ArgMap -> Fail Int
 getRequiredIntValue l k m =
   getRequiredValue l k m "Int" asInt

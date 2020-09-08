@@ -24,16 +24,29 @@ import System.FilePath
 import Types
 import Utils
 
-data CodeArgs = CodeArgs
-  {ca_file :: Maybe FilePath}
+data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
 
-parseArgs :: PluginCall -> ArgMap -> Fail CodeArgs
-parseArgs call m = do
+data CodeArgs = CodeArgs
+  { ca_file :: Maybe FilePath,
+    ca_mode :: CodeMode
+  }
+
+parseArgs :: PluginCall -> Fail CodeArgs
+parseArgs call = do
   file <- getOptionalStringValue loc "file" m
-  checkForSpuriousArgs loc m ["file"]
-  return $ CodeArgs {ca_file = fmap T.unpack file}
+  modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
+  mode <-
+    case modeStr of
+      Just "show" -> return CodeModeShow
+      Just "hide" -> return CodeModeHide
+      Just "showOnly" -> return CodeModeShowOnly
+      Nothing -> return CodeModeShow
+      Just _ -> error $ "uncovered case: " ++ show modeStr
+  checkForSpuriousArgs loc m ["file", "mode"]
+  return $ CodeArgs {ca_file = fmap T.unpack file, ca_mode = mode}
   where
     loc = pc_location call
+    m = pc_args call
 
 mkCodePlugin :: PluginName -> LangConfig -> PluginConfig Action
 mkCodePlugin name cfg =
@@ -49,8 +62,13 @@ pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules _cfg _args = return ()
 
 runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.Text
-runPlugin _cfg _buildArgs call =
-  return ("~~~" <> unPluginName (pc_pluginName call) <> "\n" <> pc_body call <> "\n~~~")
+runPlugin _cfg _buildArgs call = do
+  args <- exceptInM $ parseArgs call
+  let code = "~~~" <> unPluginName (pc_pluginName call) <> "\n" <> pc_body call <> "\n~~~"
+  case ca_mode args of
+    CodeModeShow -> return code
+    CodeModeShowOnly -> return code
+    CodeModeHide -> return ""
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
@@ -61,11 +79,13 @@ processAllCalls langCfg cfg buildArgs calls = do
     lift $ myWriteFile file code
   where
     collectCode m call = do
-      (file, code) <- codeFromCall call
-      return $ M.insertWith (\new old -> old <> "\n\n" <> new) file code m
-    codeFromCall :: PluginCall -> Fail (FilePath, T.Text)
+      (file, mCode) <- codeFromCall call
+      case mCode of
+        Nothing -> return m
+        Just code -> return $ M.insertWith (\new old -> old <> "\n\n" <> new) file code m
+    codeFromCall :: PluginCall -> Fail (FilePath, Maybe T.Text)
     codeFromCall call = do
-      args <- parseArgs call (pc_args call)
+      args <- parseArgs call
       let baseFile =
             case ca_file args of
               Nothing -> replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
@@ -73,7 +93,11 @@ processAllCalls langCfg cfg buildArgs calls = do
           file = pluginDir cfg (pc_pluginName call) </> baseFile
           body = T.stripEnd (pc_body call)
           code = lineComment langCfg (pc_location call) <> body
-      return (file, code)
+      let mCode =
+            case ca_mode args of
+              CodeModeShowOnly -> Nothing
+              _ -> Just code
+      return (file, mCode)
 
 data LangConfig = LangConfig
   { lc_fileExt :: String,
