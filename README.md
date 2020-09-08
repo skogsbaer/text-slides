@@ -32,6 +32,8 @@ text-slides --output-mode pdf example/sample-talk.md
 
 * [stack](https://docs.haskellstack.org/en/stable/README/), a build tool for Haskell.
 * [pandoc](https://pandoc.org)
-* For including images from keynote, you need [python3](https://www.python.org) and
-  the [appscript](https://pypi.org/project/appscript/) library.
-* For writing diagrams with mermaid, you need [mermaid](https://mermaid-js.github.io/mermaid/#/)
+* For including images from keynote, you need [python3](https://www.python.org),
+  the [appscript](https://pypi.org/project/appscript/) library, and the
+  [convert](https://imagemagick.org) commandline tool from ImageMagick.
+* For writing diagrams with mermaid, you need [mermaid](https://mermaid-js.github.io/mermaid/#/):
+  `npm install -g @mermaid-js/mermaid-cli`
