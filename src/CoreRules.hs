@@ -70,7 +70,7 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
   let commonPandocArgs =
         [ "--from=json",
           "--slide-level=2",
-          "--highlight-style=pygments",
+          "--highlight-style=haddock",
           "--output=" ++ outFile
         ]
   modePandocArgs <-
