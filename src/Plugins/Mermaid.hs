@@ -84,7 +84,7 @@ runMermaid cfg _buildArgs outFile = do
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do
-  (pluginDir cfg mermaidPluginName) ++ "/*.png" %> runMermaid cfg args
+  (pluginDir cfg mermaidPluginName) ++ "/*.svg" %> runMermaid cfg args
   (pluginDir cfg mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile cfg args]
   (pluginDir cfg mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile cfg args]
 
@@ -110,13 +110,13 @@ runPlugin cfg _buildArgs () call = do
       outDir = pluginDir cfg mermaidPluginName
       outFile ext =
         pluginDir cfg mermaidPluginName </> T.unpack (unHash hash) <.> ext
-      pngFile = outFile ".png"
+      diagFile = outFile ".svg"
       -- all output files are place directly in the build directory
-      relPngFile = makeRelative (bc_buildDir cfg) pngFile
+      relDiagFile = makeRelative (bc_buildDir cfg) diagFile
   liftIO $ createDirectoryIfMissing True outDir
   liftIO $ J.encodeFile (outFile ".json") mermaidCall
   liftIO $ T.writeFile (outFile ".mdd") (pc_body call)
-  let res = "![](" <> T.pack relPngFile <> ")"
+  let res = "![](" <> T.pack relDiagFile <> ")"
   return (res, ())
   where
     toArg _ Nothing = []
