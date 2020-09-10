@@ -37,12 +37,14 @@ getShakeVersion cfg = do
 
 cleanupShakeFiles :: FilePath -> String -> IO ()
 cleanupShakeFiles shakeDir curVersion = do
-  files <- myListDirectory shakeDir (const True)
-  forM_ files $ \file -> do
-    b <- doesDirectoryExist file
-    when (b && takeFileName file /= curVersion) $ do
-      noteIO $ "Deleting old shake directory " ++ file
-      removeDirectoryRecursive file
+  b <- doesDirectoryExist shakeDir
+  when b $ do
+    files <- myListDirectory shakeDir (const True)
+    forM_ files $ \file -> do
+      b <- doesDirectoryExist file
+      when (b && takeFileName file /= curVersion) $ do
+        noteIO $ "Deleting old shake directory " ++ file
+        removeDirectoryRecursive file
 
 main :: IO ()
 main = do
