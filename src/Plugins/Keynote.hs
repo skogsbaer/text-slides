@@ -53,15 +53,17 @@ parseArgs call = do
 keynotePluginName :: PluginName
 keynotePluginName = PluginName "keynote"
 
-keynotePlugin :: PluginConfig Action
+keynotePlugin :: AnyPluginConfig Action
 keynotePlugin =
-  PluginConfig
-    { p_name = keynotePluginName,
-      p_kind = PluginWithoutBody,
-      p_rules = pluginRules,
-      p_expand = runPlugin,
-      p_forAllCalls = processAllCalls
-    }
+  AnyPluginConfig $
+    PluginConfig
+      { p_name = keynotePluginName,
+        p_kind = PluginWithoutBody,
+        p_rules = pluginRules,
+        p_init = return (),
+        p_expand = runPlugin,
+        p_forAllCalls = processAllCalls
+      }
 
 -- | Convert a keynote file into a path in the build directory where the results of extracting
 -- the images of the presentation will be placed. The inverse of this function is
@@ -130,14 +132,15 @@ pluginRules cfg _args = do
   where
     isKeynoteJpeg fp = isJust (slideImagePathToPresentationHashPath fp)
 
-runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.Text
-runPlugin cfg _buildArgs call = do
+runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
+runPlugin cfg _buildArgs () call = do
   args <- exceptInM $ parseArgs call
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
   -- all output files are place directly in the build directory
   let relDir = makeRelative (bc_buildDir cfg) dir
       imgFile = relDir </> "slides" </> printf "trimmed_slides.%03d.jpeg" (ka_slide args)
-  return $ "![](" <> T.pack imgFile <> ")"
+      res = "![](" <> T.pack imgFile <> ")"
+  return (res, ())
 
 processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()

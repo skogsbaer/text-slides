@@ -16,7 +16,7 @@ import System.Directory
 import System.FilePath
 import Types
 
-allPlugins :: [PluginConfig Action]
+allPlugins :: [AnyPluginConfig Action]
 allPlugins = [keynotePlugin, mermaidPlugin] ++ codePlugins
 
 defaultBuildConfig :: BuildConfig
@@ -28,7 +28,8 @@ defaultBuildConfig =
       bc_convert = "convert",
       bc_mermaid = "mmdc",
       bc_beamerHeader = Nothing,
-      bc_plugins = M.fromList $ map (\p -> (p_name p, p)) allPlugins
+      bc_plugins =
+        M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) allPlugins
     }
 
 getBuildConfig :: CmdlineOpts -> IO BuildConfig

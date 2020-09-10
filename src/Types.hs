@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 module Types where
 
 import Control.Monad.Trans.Except
@@ -23,12 +25,14 @@ exceptInM (Left err) = throwE err
 data OutputMode
   = OutputHtml
   | OutputPdf
+  | OutputLatex
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 outputModeStringMapping :: [(OutputMode, T.Text)]
 outputModeStringMapping =
   [ (OutputHtml, "html"),
-    (OutputPdf, "pdf")
+    (OutputPdf, "pdf"),
+    (OutputLatex, "latex")
   ]
 
 readOutputMode :: T.Text -> Maybe OutputMode
@@ -44,7 +48,7 @@ outputModeToExtension mode = "." <> showOutputMode mode
 data BuildArgs = BuildArgs
   {ba_inputFile :: FilePath}
 
-type PluginMap m = M.Map PluginName (PluginConfig m)
+type PluginMap m = M.Map PluginName (AnyPluginConfig m)
 
 data GenericBuildConfig m = BuildConfig
   { bc_buildDir :: FilePath,
@@ -163,9 +167,13 @@ checkForSpuriousArgs loc m ks =
    in if S.null unsupportedKeys
         then Right ()
         else
-          Left $
-            unLocation loc <> ": Unkown argument keys: "
-              <> (T.intercalate ", " (S.toList unsupportedKeys))
+          let l = S.toList unsupportedKeys
+              keyStr = if length l == 1 then "key" else "keys"
+           in Left $
+                unLocation loc <> ": Unkown argument " <> keyStr <> ": "
+                  <> (T.intercalate ", " (S.toList unsupportedKeys))
+                  <> ". Known keys: "
+                  <> (T.intercalate ", " (S.toList supportedKeys))
 
 newtype Location = Location {unLocation :: T.Text}
   deriving (Eq, Show)
@@ -181,17 +189,21 @@ data PluginCall = PluginCall
   }
   deriving (Eq, Show)
 
-data PluginConfig action = PluginConfig
+data AnyPluginConfig action = forall state. AnyPluginConfig {pluginConfig :: PluginConfig state action}
+
+data PluginConfig state action = PluginConfig
   { p_name :: PluginName,
     p_kind :: PluginKind,
     -- | Called in the conversion step .md ~~> .mdraw
     p_rules :: GenericBuildConfig action -> BuildArgs -> Rules (),
     -- | Called in the conversion step .md ~~> .mdraw
+    p_init :: action state,
     p_expand ::
       GenericBuildConfig action ->
       BuildArgs ->
+      state ->
       PluginCall ->
-      ExceptT T.Text action T.Text,
+      ExceptT T.Text action (T.Text, state),
     p_forAllCalls ::
       GenericBuildConfig action ->
       BuildArgs ->
@@ -199,10 +211,13 @@ data PluginConfig action = PluginConfig
       ExceptT T.Text action ()
   }
 
-instance Show (PluginConfig a) where
+instance Show (PluginConfig s a) where
   showsPrec p cfg =
     showParen (p > 10) $
       showString "PluginConfig "
         . showsPrec 11 (p_name cfg)
         . showString " "
         . showsPrec 11 (p_kind cfg)
+
+instance Show (AnyPluginConfig a) where
+  showsPrec p (AnyPluginConfig cfg) = showsPrec p cfg

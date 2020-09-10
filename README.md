@@ -88,7 +88,11 @@ path is interpreted relative to `build/plugins/LANGUAGE`.
 * `mode` (optional string): one of `"show"`, `"hide"` or `"showOnly"`. The default is `"show"`: the
 code is displayed on the slides and extracted. Mode `"hide"` extracts the code but does not
 show it on the slides, `"showOnly"` shows the code on the slides but does not extract it.
-
+* `lineNumbers` (optional string): one of `"on"`, `"off"` or `"auto"`. The default is `"auto"`:
+line numbers are printed if the code is more than 5 lines long.
+* `firstLine` (option string or int): determines the starting line number. An int simply sets
+the number of the first line. The string `"continue"` resumes line numbering where
+the last code block left off.
 #### Example
 
 ```

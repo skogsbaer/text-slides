@@ -45,7 +45,7 @@ sequenceDiagram
 
 ~~~keynote(file: "my_presentation.key", slide: 2)
 
-## Source code (1)
+## Source code
 
 The following code is extracted to `build/plugins/python/sample-talk.py`.
 Executing the code in the file runs all doctests.
@@ -60,10 +60,13 @@ def foo(x):
     return x + 1
 ~~~
 
-## Source code (2)
+## Source code continued
 
-The following code is appended to `build/plugins/python/sample-talk.py`
+More code:
 
-~~~python
-print(foo(41))
+~~~python(lineNumbers: "on", firstLine: "continue")
+def bar(x):
+    return foo(x + 1)
+
+print(bar(40))
 ~~~

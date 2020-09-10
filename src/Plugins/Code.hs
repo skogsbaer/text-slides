@@ -25,35 +25,71 @@ import Types
 import Utils
 
 data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
+  deriving (Eq, Show)
+
+data LineNumberMode = LineNumbersOff | LineNumbersOn | LineNumbersAuto
+  deriving (Eq, Show)
+
+data FirstLine = FirstLineImplicit | FirstLineExplicit Int | FirstLineContinue
+  deriving (Eq, Show)
 
 data CodeArgs = CodeArgs
   { ca_file :: Maybe FilePath,
-    ca_mode :: CodeMode
+    ca_mode :: CodeMode,
+    ca_lineNumberMode :: LineNumberMode,
+    ca_firstLine :: FirstLine
   }
 
 parseArgs :: PluginCall -> Fail CodeArgs
 parseArgs call = do
   file <- getOptionalStringValue loc "file" m
   modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
+  lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
   mode <-
     case modeStr of
       Just "show" -> return CodeModeShow
       Just "hide" -> return CodeModeHide
       Just "showOnly" -> return CodeModeShowOnly
       Nothing -> return CodeModeShow
-      Just _ -> error $ "uncovered case: " ++ show modeStr
-  checkForSpuriousArgs loc m ["file", "mode"]
-  return $ CodeArgs {ca_file = fmap T.unpack file, ca_mode = mode}
+      Just x -> error $ "uncovered case: " ++ show x
+  lineNum <-
+    case lineNumStr of
+      Just "on" -> return LineNumbersOn
+      Just "off" -> return LineNumbersOff
+      Just "auto" -> return LineNumbersAuto
+      Nothing -> return LineNumbersAuto
+      Just x -> error $ "uncovered case: " ++ show x
+  firstLineM <- getOptionalValue loc "firstLine" m "Int or \"continue\"" $ \v ->
+    case v of
+      ArgInt i -> Just $ FirstLineExplicit i
+      ArgString "continue" -> Just $ FirstLineContinue
+      _ -> Nothing
+  let firstLine = fromMaybe FirstLineImplicit firstLineM
+  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine"]
+  return $
+    CodeArgs
+      { ca_file = fmap T.unpack file,
+        ca_mode = mode,
+        ca_lineNumberMode = lineNum,
+        ca_firstLine = firstLine
+      }
   where
     loc = pc_location call
     m = pc_args call
 
-mkCodePlugin :: PluginName -> LangConfig -> PluginConfig Action
+data CodeState = CodeState
+  {cs_nextLineNumber :: Int}
+
+initialCodeState :: CodeState
+initialCodeState = CodeState 1
+
+mkCodePlugin :: PluginName -> LangConfig -> PluginConfig CodeState Action
 mkCodePlugin name cfg =
   PluginConfig
     { p_name = name,
       p_kind = PluginWithBody,
       p_rules = pluginRules,
+      p_init = return initialCodeState,
       p_expand = runPlugin,
       p_forAllCalls = processAllCalls cfg
     }
@@ -61,14 +97,44 @@ mkCodePlugin name cfg =
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules _cfg _args = return ()
 
-runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.Text
-runPlugin _cfg _buildArgs call = do
+runPlugin ::
+  BuildConfig -> BuildArgs -> CodeState -> PluginCall -> ExceptT T.Text Action (T.Text, CodeState)
+runPlugin _cfg _buildArgs state call = do
   args <- exceptInM $ parseArgs call
-  let code = "~~~" <> unPluginName (pc_pluginName call) <> "\n" <> pc_body call <> "\n~~~"
-  case ca_mode args of
-    CodeModeShow -> return code
-    CodeModeShowOnly -> return code
-    CodeModeHide -> return ""
+  let showLineNumbers =
+        case ca_lineNumberMode args of
+          LineNumbersOff -> False
+          LineNumbersOn -> True
+          LineNumbersAuto -> length (T.lines (pc_body call)) > 5
+      firstLine =
+        case ca_firstLine args of
+          FirstLineImplicit -> 1
+          FirstLineExplicit i -> i
+          FirstLineContinue -> cs_nextLineNumber state
+      body = pc_body call
+      nextState =
+        CodeState
+          { cs_nextLineNumber =
+              if ca_mode args == CodeModeHide
+                then cs_nextLineNumber state
+                else if showLineNumbers then firstLine + length (T.lines body) else 1
+          }
+      header =
+        "~~~{"
+          <> "."
+          <> unPluginName (pc_pluginName call)
+          <> ( if showLineNumbers
+                 then " .numberLines startFrom=\"" <> showText firstLine <> "\""
+                 else ""
+             )
+          <> "}"
+      code = header <> "\n" <> body <> "\n~~~"
+      result =
+        case ca_mode args of
+          CodeModeShow -> code
+          CodeModeShowOnly -> code
+          CodeModeHide -> ""
+  return (result, nextState)
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
@@ -108,9 +174,9 @@ data LangConfig = LangConfig
 lineComment :: LangConfig -> Location -> T.Text
 lineComment cfg l = lc_commentStart cfg <> unLocation l <> fromMaybe "" (lc_commentEnd cfg) <> "\n"
 
-codePlugins :: [PluginConfig Action]
+codePlugins :: [AnyPluginConfig Action]
 codePlugins = flip map languages $ \(name, langCfg) ->
-  mkCodePlugin (PluginName name) langCfg
+  AnyPluginConfig $ mkCodePlugin (PluginName name) langCfg
 
 languages :: [(T.Text, LangConfig)]
 languages =

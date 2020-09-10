@@ -50,15 +50,17 @@ parseArgs call = do
 mermaidPluginName :: PluginName
 mermaidPluginName = PluginName "mermaid"
 
-mermaidPlugin :: PluginConfig Action
+mermaidPlugin :: AnyPluginConfig Action
 mermaidPlugin =
-  PluginConfig
-    { p_name = mermaidPluginName,
-      p_kind = PluginWithBody,
-      p_rules = pluginRules,
-      p_expand = runPlugin,
-      p_forAllCalls = processAllCalls
-    }
+  AnyPluginConfig $
+    PluginConfig
+      { p_name = mermaidPluginName,
+        p_kind = PluginWithBody,
+        p_rules = pluginRules,
+        p_init = return (),
+        p_expand = runPlugin,
+        p_forAllCalls = processAllCalls
+      }
 
 runMermaid :: BuildConfig -> BuildArgs -> FilePath -> Action ()
 runMermaid cfg _buildArgs outFile = do
@@ -96,8 +98,8 @@ instance J.FromJSON MermaidCall
 
 instance J.ToJSON MermaidCall
 
-runPlugin :: BuildConfig -> BuildArgs -> PluginCall -> ExceptT T.Text Action T.Text
-runPlugin cfg _buildArgs call = do
+runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
+runPlugin cfg _buildArgs () call = do
   args <- exceptInM $ parseArgs call
   let mermaidCall =
         MermaidCall
@@ -114,7 +116,8 @@ runPlugin cfg _buildArgs call = do
   liftIO $ createDirectoryIfMissing True outDir
   liftIO $ J.encodeFile (outFile ".json") mermaidCall
   liftIO $ T.writeFile (outFile ".mdd") (pc_body call)
-  return $ "![](" <> T.pack relPngFile <> ")"
+  let res = "![](" <> T.pack relPngFile <> ")"
+  return (res, ())
   where
     toArg _ Nothing = []
     toArg opt (Just i) = [opt, showText i]

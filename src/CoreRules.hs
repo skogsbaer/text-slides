@@ -1,3 +1,6 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module CoreRules
   ( coreRules,
     transformMarkdown,
@@ -7,7 +10,6 @@ module CoreRules
 where
 
 import Control.Monad
-import Control.Monad.Extra
 import Control.Monad.Trans.Except
 import qualified Data.Aeson as J
 import qualified Data.HashMap.Strict as Hm
@@ -73,6 +75,14 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
           "--highlight-style=haddock",
           "--output=" ++ outFile
         ]
+      latexArgs = do
+        forM_ (bc_beamerHeader cfg) $ \x -> need [x]
+        return $
+          ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
+            ++ ( case bc_beamerHeader cfg of
+                   Just f -> ["--include-in-header=" ++ f]
+                   Nothing -> []
+               )
   modePandocArgs <-
     case mode of
       OutputHtml ->
@@ -81,27 +91,18 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
             "--mathjax",
             "--standalone"
           ]
-      OutputPdf -> do
-        forM_ (bc_beamerHeader cfg) $ \x -> need [x]
-        return $
-          ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
-            ++ ( case bc_beamerHeader cfg of
-                   Just f -> ["--include-in-header=" ++ f]
-                   Nothing -> []
-               )
+      OutputPdf -> latexArgs
+      OutputLatex -> latexArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO (bc_pandoc cfg) pandocArgs
 
-getKnownPlugin :: PluginName -> PluginMap m -> PluginConfig m
-getKnownPlugin pluginName pluginMap =
-  case M.lookup pluginName pluginMap of
-    Nothing ->
-      error $
-        "BUG: Plugin with name " ++ show pluginName ++ " missing in plugin map"
-    Just plugin -> plugin
+data AnyPluginWithState action
+  = forall state.
+    AnyPluginWithState (PluginConfig state action) state
 
 transformMarkdown ::
+  forall m.
   MonadFail m =>
   (T.Text -> m ()) ->
   GenericBuildConfig m ->
@@ -111,32 +112,52 @@ transformMarkdown ::
   m (T.Text, [PluginCall])
 transformMarkdown warnFun cfg buildArgs inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
-  lines <- mapMaybeM tokenToLine tokens
+  (revLines, _) <- foldM tokenToLine ([], M.empty) tokens
   let calls =
         flip mapMaybe tokens $ \tok ->
           case tok of
             Line _ -> Nothing
             Plugin call -> Just call
-  return $ (T.unlines lines, calls)
+  return $ (T.unlines $ reverse revLines, calls)
   where
-    tokenToLine tok =
+    tokenToLine ::
+      ([T.Text], M.Map PluginName (AnyPluginWithState m)) ->
+      Token ->
+      m ([T.Text], M.Map PluginName (AnyPluginWithState m))
+    tokenToLine (acc, stateMap) tok =
       case tok of
-        Line t -> return (Just t)
-        Plugin call ->
-          case M.lookup (pc_pluginName call) (bc_plugins cfg) of
-            Nothing ->
-              error $
-                "BUG: Plugin call " ++ show call
-                  ++ " present after parsing but plugin not in plugin map"
-            Just plugin -> do
-              pluginRes <- runExceptT $ p_expand plugin cfg buildArgs call
+        Line t -> return (t : acc, stateMap)
+        Plugin call -> do
+          old <- getPluginWithState (pc_pluginName call) stateMap
+          case old of
+            AnyPluginWithState plugin pluginState -> do
+              pluginRes <- runExceptT $ p_expand plugin cfg buildArgs pluginState call
               case pluginRes of
-                Right t -> return (Just t)
+                Right (t, newState) ->
+                  let newPluginWithState = AnyPluginWithState plugin newState
+                   in return (t : acc, M.insert (pc_pluginName call) newPluginWithState stateMap)
                 Left err -> do
                   warnFun (unLocation (pc_location call) <> ": plugin call failed: " <> err)
-                  return Nothing
+                  -- insert the old state into the map, it might have been just initialized
+                  return (acc, M.insert (pc_pluginName call) old stateMap)
+    getPluginWithState ::
+      PluginName -> M.Map PluginName (AnyPluginWithState m) -> m (AnyPluginWithState m)
+    getPluginWithState pluginName stateMap =
+      case M.lookup pluginName stateMap of
+        Just x -> return x
+        Nothing ->
+          case M.lookup pluginName (bc_plugins cfg) of
+            Nothing ->
+              error $
+                "BUG: Plugin " ++ show pluginName
+                  ++ " present after parsing but plugin not in plugin map"
+            Just (AnyPluginConfig plugin) -> do
+              state <- p_init plugin
+              return (AnyPluginWithState plugin state)
     pluginKindMap =
-      M.map p_kind (bc_plugins cfg)
+      flip M.map (bc_plugins cfg) $ \pws ->
+        case pws of
+          AnyPluginConfig plugin -> p_kind plugin
 
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
@@ -144,7 +165,13 @@ generateRawMarkdown cfg args inFile outFile = do
   (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args inFile md
   let callMap = foldr (\call m -> M.insertWith (++) (pc_pluginName call) [call] m) M.empty calls
   forM_ (M.toList callMap) $ \(pluginName, calls) -> do
-    res <- runExceptT $ p_forAllCalls (getKnownPlugin pluginName (bc_plugins cfg)) cfg args calls
+    res <-
+      case M.lookup pluginName (bc_plugins cfg) of
+        Nothing ->
+          error $
+            "BUG: Plugin with name " ++ show pluginName ++ " missing in plugin map"
+        Just (AnyPluginConfig plugin) ->
+          runExceptT $ p_forAllCalls plugin cfg args calls
     case res of
       Left err -> do
         warn
@@ -166,7 +193,7 @@ coreRules cfg args = do
     outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode json
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
-  sequence_ $ map (\(_, p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
+  sequence_ $ map (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
   where
     outFile ext = mainOutputFile cfg args ext
     raw = outFile mdRawExt
