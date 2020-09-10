@@ -3,7 +3,7 @@ module Test.TestBuildConfig where
 import qualified Data.Map as M
 import Types
 
-testBuildConfig :: [PluginConfig m] -> GenericBuildConfig m
+testBuildConfig :: [AnyPluginConfig m] -> GenericBuildConfig m
 testBuildConfig plugins =
   BuildConfig
     { bc_buildDir = "build",
@@ -12,7 +12,7 @@ testBuildConfig plugins =
       bc_convert = "convert",
       bc_mermaid = "mermaid",
       bc_beamerHeader = Nothing,
-      bc_plugins = M.fromList $ map (\p -> (p_name p, p)) plugins
+      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins
     }
 
 testBuildArgs :: BuildArgs

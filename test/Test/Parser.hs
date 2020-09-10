@@ -37,6 +37,8 @@ test_parse :: IO ()
 test_parse = do
   let tokens = parseMarkdown "<input>" (M.fromList plugins) sampleInput
   assertEqual (Right expected) tokens
+  let tokens2 = parseMarkdown "<input>" (M.fromList plugins) sampleInput2
+  assertEqual (Right expected) tokens2
   where
     plugins =
       [ (PluginName "keynote", PluginWithoutBody),
@@ -65,6 +67,19 @@ sampleInput :: T.Text
 sampleInput =
   [here|
 ~~~keynote(file: "my_presentation.key", slide: 1)
+
+-- Source code --
+~~~python
+print(foo(41))
+~~~
+
+~~~foo
+|]
+
+sampleInput2 :: T.Text
+sampleInput2 =
+  [here|
+~~~keynote (file: "my_presentation.key", slide: 1) ~~~
 
 -- Source code --
 ~~~python

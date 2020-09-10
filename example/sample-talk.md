@@ -43,7 +43,7 @@ sequenceDiagram
 
 ## Diagrams with keynote
 
-~~~keynote(file: "my_presentation.key", slide: 2)
+~~~keynote(file: "my_presentation.key", slide: 2) ~~~
 
 ## Source code
 
@@ -64,7 +64,7 @@ def foo(x):
 
 More code:
 
-~~~python(lineNumbers: "on", firstLine: "continue")
+~~~python (lineNumbers: "on", firstLine: "continue")
 def bar(x):
     return foo(x + 1)
 

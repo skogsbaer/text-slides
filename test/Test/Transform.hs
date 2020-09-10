@@ -22,29 +22,35 @@ test_transform = do
   assertEqual expected out
   where
     keynote =
-      PluginConfig
-        { p_name = PluginName "keynote",
-          p_kind = PluginWithoutBody,
-          p_rules = \_cfg _args -> return (),
-          p_expand = \_cfg _args call -> do
-            file <- exceptInM $ getRequiredStringValue unknownLocation "file" (pc_args call)
-            slide <- exceptInM $ getRequiredIntValue unknownLocation "slide" (pc_args call)
-            return $
-              "![](build/plugins/keynote/"
-                <> file
-                <> "/"
-                <> T.pack (show slide)
-                <> ".jpg)",
-          p_forAllCalls = \_cfg _args _ -> return ()
-        }
+      AnyPluginConfig $
+        PluginConfig
+          { p_name = PluginName "keynote",
+            p_kind = PluginWithoutBody,
+            p_rules = \_cfg _args -> return (),
+            p_init = return (),
+            p_expand = \_cfg _args () call -> do
+              file <- exceptInM $ getRequiredStringValue unknownLocation "file" (pc_args call)
+              slide <- exceptInM $ getRequiredIntValue unknownLocation "slide" (pc_args call)
+              return
+                ( "![](build/plugins/keynote/"
+                    <> file
+                    <> "/"
+                    <> T.pack (show slide)
+                    <> ".jpg)",
+                  ()
+                ),
+            p_forAllCalls = \_cfg _args _ -> return ()
+          }
     python =
-      PluginConfig
-        { p_name = PluginName "python",
-          p_kind = PluginWithBody,
-          p_rules = \_cfg _args -> return (),
-          p_expand = \_cfg _args call -> return $ "~~~python\n" <> pc_body call <> "\n~~~",
-          p_forAllCalls = \_cfg _args _ -> return ()
-        }
+      AnyPluginConfig $
+        PluginConfig
+          { p_name = PluginName "python",
+            p_kind = PluginWithBody,
+            p_rules = \_cfg _args -> return (),
+            p_init = return (),
+            p_expand = \_cfg _args () call -> return ("~~~python\n" <> pc_body call <> "\n~~~", ()),
+            p_forAllCalls = \_cfg _args _ -> return ()
+          }
     plugins = [keynote, python]
 
 sampleInput :: T.Text

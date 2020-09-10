@@ -56,7 +56,8 @@ parensP = P.between (symbolP "(") (symbolP ")")
 pluginCallP :: Parser PluginCall
 pluginCallP = do
   name <- lexemeP pluginCallPrefixP
-  args <- P.option [] $ parensP (P.sepBy (lexemeP argP) (symbolP ","))
+  args <- lexemeP $ P.option [] $ parensP (P.sepBy (lexemeP argP) (symbolP ","))
+  P.option () $ symbolP "~~~"
   return $
     PluginCall
       { pc_pluginName = name,
