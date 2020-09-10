@@ -63,6 +63,7 @@ pluginCallP = do
       { pc_pluginName = name,
         pc_args = M.fromList args,
         pc_body = "",
+        pc_sectionName = Nothing,
         pc_location = unknownLocation
       }
   where
@@ -91,20 +92,21 @@ argValueP =
     P.<|> (ArgInt <$> intP)
     P.<|> (ArgBool <$> boolP)
 
-parsePluginCall :: String -> T.Text -> Fail PluginCall
-parsePluginCall location line =
+parsePluginCall :: String -> Maybe T.Text -> T.Text -> Fail PluginCall
+parsePluginCall location mSectionName line =
   case P.parse (pluginCallP <* P.eof) location line of
     Left err -> Left $ T.pack (P.errorBundlePretty err)
-    Right x -> Right (x {pc_location = Location (T.pack location)})
+    Right x -> Right (x {pc_location = Location (T.pack location), pc_sectionName = mSectionName})
 
 data ParseContext = ParseContext
   { pc_revTokens :: [Token],
-    pc_currentCall :: Maybe (PluginCall, [T.Text])
+    pc_currentCall :: Maybe (PluginCall, [T.Text]),
+    pc_currentSectionName :: Maybe T.Text
     -- the list contains the reversed lines of the plugin's body
   }
 
 emptyParseContext :: ParseContext
-emptyParseContext = ParseContext [] Nothing
+emptyParseContext = ParseContext [] Nothing Nothing
 
 parseMarkdown :: FilePath -> M.Map PluginName PluginKind -> T.Text -> Fail [Token]
 parseMarkdown file plugins input = do
@@ -123,7 +125,7 @@ parseMarkdown file plugins input = do
               if rstripped == "~~~"
                 then
                   return $
-                    ParseContext
+                    ctx
                       { pc_revTokens =
                           Plugin
                             ( call
@@ -139,11 +141,31 @@ parseMarkdown file plugins input = do
               case getPluginName line of
                 Just name
                   | Just k <- M.lookup name plugins -> do
-                    call <- parsePluginCall (file ++ ":" ++ show lineNo) line
+                    call <-
+                      parsePluginCall (file ++ ":" ++ show lineNo) (pc_currentSectionName ctx) line
                     case k of
                       PluginWithoutBody ->
                         return $
                           ctx {pc_revTokens = Plugin call : pc_revTokens ctx}
                       PluginWithBody ->
                         return $ ctx {pc_currentCall = Just (call, [])}
-                _ -> return $ ctx {pc_revTokens = Line line : pc_revTokens ctx}
+                _ -> do
+                  let sectionName = parseSectionName line
+                  return $
+                    ctx
+                      { pc_revTokens = Line line : pc_revTokens ctx,
+                        pc_currentSectionName =
+                          case sectionName of
+                            Just x -> Just x
+                            Nothing -> pc_currentSectionName ctx
+                      }
+
+parseSectionName :: T.Text -> Maybe T.Text
+parseSectionName t =
+  if "##" `T.isPrefixOf` t
+    then
+      let title = T.drop 2 t
+       in if "#" `T.isPrefixOf` title
+            then Nothing
+            else Just $ T.strip $ T.dropWhileEnd (\c -> c == '#') $ T.stripEnd title
+    else Nothing

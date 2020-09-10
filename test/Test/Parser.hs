@@ -7,13 +7,12 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import Parser
 import Test.Framework
-import Text.Heredoc
 import Types
 
 test_parsePluginCall :: IO ()
 test_parsePluginCall = do
-  check "~~~foo  ()" (PluginCall (PluginName "foo") loc M.empty "")
-  check "~~~foo  " (PluginCall (PluginName "foo") loc M.empty "")
+  check "~~~foo  ()" (PluginCall (PluginName "foo") loc Nothing M.empty "")
+  check "~~~foo  " (PluginCall (PluginName "foo") loc Nothing M.empty "")
   check
     "~~~foo  (  k1 : \"string\",k2:42  , k3: true )  "
     ( PluginCall
@@ -25,13 +24,14 @@ test_parsePluginCall = do
                 ("k2", ArgInt 42),
                 ("k3", ArgBool True)
               ],
-          pc_body = ""
+          pc_body = "",
+          pc_sectionName = Nothing
         }
     )
   where
     loc = Location "<input>"
     check input expected =
-      assertEqual (Right expected) (parsePluginCall "<input>" input)
+      assertEqual (Right expected) (parsePluginCall "<input>" Nothing input)
 
 test_parse :: IO ()
 test_parse = do
@@ -48,43 +48,54 @@ test_parse = do
       [ Line "",
         Plugin $
           PluginCall
-            (PluginName "keynote")
-            (Location "<input>:2")
-            ( M.fromList
-                [ ("file", ArgString "my_presentation.key"),
-                  ("slide", ArgInt 1)
-                ]
-            )
-            "",
+            { pc_pluginName = (PluginName "keynote"),
+              pc_location = (Location "<input>:2"),
+              pc_args =
+                M.fromList
+                  [ ("file", ArgString "my_presentation.key"),
+                    ("slide", ArgInt 1)
+                  ],
+              pc_sectionName = Nothing,
+              pc_body = ""
+            },
         Line "",
-        Line "-- Source code --",
-        Plugin $ PluginCall (PluginName "python") (Location "<input>:5") M.empty "print(foo(41))",
+        Line "## Source code",
+        Plugin $
+          PluginCall
+            { pc_pluginName = PluginName "python",
+              pc_location = Location "<input>:5",
+              pc_args = M.empty,
+              pc_body = "print(foo(41))",
+              pc_sectionName = Just "Source code"
+            },
         Line "",
         Line "~~~foo"
       ]
 
 sampleInput :: T.Text
 sampleInput =
-  [here|
-~~~keynote(file: "my_presentation.key", slide: 1)
-
--- Source code --
-~~~python
-print(foo(41))
-~~~
-
-~~~foo
-|]
+  T.unlines
+    [ "",
+      "~~~keynote(file: \"my_presentation.key\", slide: 1)",
+      "",
+      "## Source code",
+      "~~~python",
+      "print(foo(41))",
+      "~~~",
+      "",
+      "~~~foo"
+    ]
 
 sampleInput2 :: T.Text
 sampleInput2 =
-  [here|
-~~~keynote (file: "my_presentation.key", slide: 1) ~~~
-
--- Source code --
-~~~python
-print(foo(41))
-~~~
-
-~~~foo
-|]
+  T.unlines
+    [ "",
+      "~~~keynote (file: \"my_presentation.key\", slide: 1) ~~~",
+      "",
+      "## Source code",
+      "~~~python",
+      "print(foo(41))",
+      "~~~",
+      "",
+      "~~~foo"
+    ]

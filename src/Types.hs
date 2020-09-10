@@ -184,6 +184,7 @@ unknownLocation = Location "?:?"
 data PluginCall = PluginCall
   { pc_pluginName :: PluginName,
     pc_location :: Location,
+    pc_sectionName :: Maybe T.Text,
     pc_args :: ArgMap,
     pc_body :: T.Text
   }

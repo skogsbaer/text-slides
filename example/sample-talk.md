@@ -60,6 +60,12 @@ def foo(x):
     return x + 1
 ~~~
 
+More code:
+
+~~~python
+print(foo(1))
+~~~
+
 ## Source code continued
 
 More code:

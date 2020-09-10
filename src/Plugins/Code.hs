@@ -15,9 +15,11 @@ module Plugins.Code (codePlugins) where
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
+import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Text as T
+import Data.Time.Clock
 import Development.Shake
 import Logging
 import System.FilePath
@@ -136,19 +138,53 @@ runPlugin _cfg _buildArgs state call = do
           CodeModeHide -> ""
   return (result, nextState)
 
+data CollectedCode = CollectedCode
+  { cc_code :: T.Text,
+    cc_sectionName :: Maybe T.Text
+  }
+  deriving (Eq, Show)
+
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls langCfg cfg buildArgs calls = do
   codeMap <- exceptInM $ foldM collectCode M.empty calls
-  forM_ (M.toList codeMap) $ \(file, code) -> do
+  time <- liftIO $ getCurrentTime
+  let header =
+        cmt
+          ( "Automcally extracted from " <> T.pack (ba_inputFile buildArgs)
+              <> " on "
+              <> showText time
+          )
+  forM_ (M.toList codeMap) $ \(file, revCode) -> do
+    let groupedBySectionName =
+          L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) (reverse revCode)
+        code =
+          T.unlines $
+            flip concatMap groupedBySectionName $ \ccs ->
+              case ccs of
+                [] -> []
+                (cc : _) ->
+                  ( case cc_sectionName cc of
+                      Just x ->
+                        let line = T.replicate (T.length x) "-"
+                         in ["", "", cmt line, cmt x, cmt line]
+                      Nothing -> []
+                  )
+                    ++ map cc_code ccs
     lift $ note ("Generating " ++ file)
-    lift $ myWriteFile file code
+    lift $ myWriteFile file (header <> code)
   where
+    cmt = lineComment langCfg
+    collectCode ::
+      M.Map FilePath [CollectedCode] ->
+      PluginCall ->
+      Fail (M.Map FilePath [CollectedCode])
     collectCode m call = do
       (file, mCode) <- codeFromCall call
       case mCode of
         Nothing -> return m
-        Just code -> return $ M.insertWith (\new old -> old <> "\n\n" <> new) file code m
+        Just code ->
+          return $ M.insertWith (++) file [CollectedCode code (pc_sectionName call)] m
     codeFromCall :: PluginCall -> Fail (FilePath, Maybe T.Text)
     codeFromCall call = do
       args <- parseArgs call
@@ -158,7 +194,7 @@ processAllCalls langCfg cfg buildArgs calls = do
               Just f -> f
           file = pluginDir cfg (pc_pluginName call) </> baseFile
           body = T.stripEnd (pc_body call)
-          code = lineComment langCfg (pc_location call) <> body
+          code = "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
       let mCode =
             case ca_mode args of
               CodeModeShowOnly -> Nothing
@@ -171,8 +207,8 @@ data LangConfig = LangConfig
     lc_commentEnd :: Maybe T.Text
   }
 
-lineComment :: LangConfig -> Location -> T.Text
-lineComment cfg l = lc_commentStart cfg <> unLocation l <> fromMaybe "" (lc_commentEnd cfg) <> "\n"
+lineComment :: LangConfig -> T.Text -> T.Text
+lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
 
 codePlugins :: [AnyPluginConfig Action]
 codePlugins = flip map languages $ \(name, langCfg) ->
