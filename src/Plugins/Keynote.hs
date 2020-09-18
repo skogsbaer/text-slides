@@ -37,18 +37,27 @@ keynoteExportScript dataDir = dataDir </> "data/keynote-export.py"
 
 data KeynoteArgs = KeynoteArgs
   { ka_file :: FilePath,
-    ka_slide :: Int
+    ka_slide :: Int,
+    ka_width :: Maybe T.Text,
+    ka_height :: Maybe T.Text
   }
 
 parseArgs :: PluginCall -> Fail KeynoteArgs
 parseArgs call = do
   ka_file <- T.unpack <$> getRequiredStringValue loc "file" argMap
   ka_slide <- getRequiredIntValue loc "slide" argMap
-  checkForSpuriousArgs loc argMap ["file", "slide"]
+  ka_width <- getOptionalValue loc "width" argMap "Int or String" intOrStringAsString
+  ka_height <- getOptionalValue loc "height" argMap "Int or String" intOrStringAsString
+  checkForSpuriousArgs loc argMap ["file", "slide", "width", "height"]
   return KeynoteArgs {..}
   where
     loc = pc_location call
     argMap = pc_args call
+    intOrStringAsString v =
+      case v of
+        ArgString t -> Just t
+        ArgInt i -> Just $ showText i
+        ArgBool _ -> Nothing
 
 keynotePluginName :: PluginName
 keynotePluginName = PluginName "keynote"
@@ -139,7 +148,14 @@ runPlugin cfg _buildArgs () call = do
   -- all output files are place directly in the build directory
   let relDir = makeRelative (bc_buildDir cfg) dir
       imgFile = relDir </> "slides" </> printf "trimmed_slides.%03d.jpeg" (ka_slide args)
-      res = "![](" <> T.pack imgFile <> ")"
+      dimensions =
+        case catMaybes
+          [ fmap (\w -> "width=" <> w) (ka_width args),
+            fmap (\w -> "height=" <> w) (ka_height args)
+          ] of
+          [] -> ""
+          l -> "{" <> T.intercalate " " l <> "}"
+      res = "![](" <> T.pack imgFile <> ")" <> dimensions
   return (res, ())
 
 processAllCalls ::
