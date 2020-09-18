@@ -42,7 +42,7 @@ data CmdlineOpts = CmdlineOpts
 
 cmdlineOptsParser :: Parser CmdlineOpts
 cmdlineOptsParser = do
-  co_outputs <-
+  outputs <-
     option (maybeReader (readOutputModes . T.pack)) $
       long "output-mode"
         <> metavar "MODES"
@@ -52,6 +52,13 @@ cmdlineOptsParser = do
           )
         <> value (Set.singleton OutputHtml)
         <> showDefaultWith (T.unpack . showOutputModes)
+  moreOutputs <-
+    flip traverse (Set.toList allOutputModes) $ \mode -> do
+      enable <-
+        switch $
+          long (T.unpack $ showOutputMode mode)
+            <> help (T.unpack $ "Enable output mode " <> showOutputMode mode)
+      pure (enable, mode)
   co_verbose <- switch $ long "verbose" <> help "Display more output"
   co_debug <- switch $ long "debug" <> help "Display debug messages"
   co_quiet <- switch $ long "quiet" <> help "Be quiet"
@@ -84,7 +91,11 @@ cmdlineOptsParser = do
     strArgument $
       metavar "INPUT_FILE.md"
         <> help "Input file in extended markdown format"
-  pure CmdlineOpts {..}
+  pure $
+    let co_outputs =
+          outputs
+            `Set.union` (Set.fromList (map snd (filter fst moreOutputs)))
+     in CmdlineOpts {..}
 
 cmdlineOptsParserInfo :: ParserInfo CmdlineOpts
 cmdlineOptsParserInfo =
