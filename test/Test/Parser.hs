@@ -36,15 +36,17 @@ test_parsePluginCall = do
 test_parse :: IO ()
 test_parse = do
   let tokens = parseMarkdown "<input>" (M.fromList plugins) sampleInput
-  assertEqual (Right expected) tokens
+  assertEqual (Right (expected "5")) tokens
   let tokens2 = parseMarkdown "<input>" (M.fromList plugins) sampleInput2
-  assertEqual (Right expected) tokens2
+  assertEqual (Right (expected "5")) tokens2
+  let tokens3 = parseMarkdown "<input>" (M.fromList plugins) sampleInput3
+  assertEqual (Right (expected "6")) tokens3
   where
     plugins =
       [ (PluginName "keynote", PluginWithoutBody),
         (PluginName "python", PluginWithBody)
       ]
-    expected =
+    expected pyPluginLineNo =
       [ Line "",
         Plugin $
           PluginCall
@@ -63,7 +65,7 @@ test_parse = do
         Plugin $
           PluginCall
             { pc_pluginName = PluginName "python",
-              pc_location = Location "<input>:5",
+              pc_location = Location ("<input>:" <> pyPluginLineNo),
               pc_args = M.empty,
               pc_body = "print(foo(41))",
               pc_sectionName = Just "Source code"
@@ -91,6 +93,21 @@ sampleInput2 =
   T.unlines
     [ "",
       "~~~keynote (file: \"my_presentation.key\", slide: 1) ~~~",
+      "",
+      "## Source code",
+      "~~~python",
+      "print(foo(41))",
+      "~~~",
+      "",
+      "~~~foo"
+    ]
+
+sampleInput3 :: T.Text
+sampleInput3 =
+  T.unlines
+    [ "",
+      "~~~keynote(file: \"my_presentation.key\", slide: 1)",
+      "~~~",
       "",
       "## Source code",
       "~~~python",
