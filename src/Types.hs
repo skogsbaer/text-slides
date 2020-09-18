@@ -45,6 +45,9 @@ showOutputMode m =
 outputModeToExtension :: OutputMode -> T.Text
 outputModeToExtension mode = "." <> showOutputMode mode
 
+allOutputModes :: S.Set OutputMode
+allOutputModes = S.fromList [minBound .. maxBound]
+
 data BuildArgs = BuildArgs
   {ba_inputFile :: FilePath}
 

@@ -46,7 +46,10 @@ cmdlineOptsParser = do
     option (maybeReader (readOutputModes . T.pack)) $
       long "output-mode"
         <> metavar "MODES"
-        <> help "Comma-separated list of output modes (html, pdf)"
+        <> help
+          ( T.unpack
+              ("Comma-separated list of output modes (" <> showOutputModes allOutputModes <> ")")
+          )
         <> value (Set.singleton OutputHtml)
         <> showDefaultWith (T.unpack . showOutputModes)
   co_verbose <- switch $ long "verbose" <> help "Display more output"
