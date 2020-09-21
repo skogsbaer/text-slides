@@ -42,11 +42,26 @@ Or, for plugins without body, like this:
 ~~~PLUGIN_NAME(ARG_LIST)
 ```
 
+To be more flexible with respect to syntax highlighting in certain editors, you can write
+calls without bodies also like this:
+
+```
+~~~PLUGIN_NAME(ARG_LIST) ~~~
+```
+
+or
+
+```
+~~~PLUGIN_NAME(ARG_LIST)
+~~~
+```
+
 If the `ARG_LIST` is empty, the paranthesis can be omitted.
 
 The `ARG_LIST` is a comma-separated list of key-value arguments. Each argument has the form
 `key: value`, where `value` can be a string like `"some string"`, a number like `42` or a boolean
 `false` or `true`.
+
 
 Here is a list of the supported plugins.
 
@@ -93,6 +108,7 @@ line numbers are printed if the code is more than 5 lines long.
 * `firstLine` (option string or int): determines the starting line number. An int simply sets
 the number of the first line. The string `"continue"` resumes line numbering where
 the last code block left off.
+
 #### Example
 
 ```
@@ -162,3 +178,48 @@ sequenceDiagram
   [convert](https://imagemagick.org) commandline tool from ImageMagick.
 * For writing diagrams with mermaid, you need [mermaid](https://mermaid-js.github.io/mermaid/#/):
   `npm install -g @mermaid-js/mermaid-cli`
+
+## Configuration
+
+### Header file for beamer presentations.
+
+You can specify a file to be included in the header of the latex file for beamer
+presentations, see Pandoc's `--include-in-header` option. The file can be specified
+in the following three ways:
+
+- Command line flag `--beamer-header FILE`.
+- A file name `beamer-header.tex` in the same directory as the input file.
+- Through the file `$HOME/.text-slides/beamer-header.tex`.
+
+### More code plugins
+
+The file `$HOME/.text-slides/code.json` lists additional code plugins. Here is an example:
+
+```json
+{ "languages": [
+    { "name": "python-repl",
+      "syntaxFile": "syntax/python-repl.xml", // optional, resolved relatively to $HOME/.text-slides
+      "extension": ".py",
+      "commentStart": "#"
+      // "commentEnd" is optional
+    }
+    # add more language definitions here
+  ]
+}
+```
+
+The syntax file is a
+[KDE syntax definition file](https://docs.kde.org/stable5/en/applications/katepart/highlight.html).
+
+### Syntax highlighting themes
+
+Pandoc comes with a couple of builtin themes for syntax highlighting. The default used by
+text-slides is the `haddock` theme. Here's how to use a different theme:
+
+* Use the commandline option `--syntax-theme=NAME_OF_THEME|FILE`.
+* Place the definition of your theme in `syntax-highlighting.theme`,
+  in the same directory as the input file.
+* Place the definition of your theme in `$HOME/.text-slides/syntax-highlighting.theme`.
+
+For a theme include with pandoc, you can save to definition to a file with this command:
+`pandoc --print-highlight-style NAME_OF_THEME > FILE`
