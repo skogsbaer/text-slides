@@ -7,13 +7,13 @@ module Cmdline
   )
 where
 
-import qualified Data.Set as Set
+import qualified Data.Set as S
 import qualified Data.Text as T
 import Development.Shake
 import Options.Applicative
 import Types
 
-readOutputModes :: T.Text -> Maybe (Set.Set OutputMode)
+readOutputModes :: T.Text -> Maybe (S.Set OutputMode)
 readOutputModes t =
   let texts =
         filter (\s -> s /= "") $
@@ -21,16 +21,16 @@ readOutputModes t =
             T.splitOn "," t
    in do
         l <- mapM readOutputMode texts
-        return (Set.fromList l)
+        return (S.fromList l)
 
-showOutputModes :: Set.Set OutputMode -> T.Text
+showOutputModes :: S.Set OutputMode -> T.Text
 showOutputModes modes =
-  T.intercalate "," (map showOutputMode $ Set.toList modes)
+  T.intercalate "," (map showOutputMode $ S.toList modes)
 
 data CmdlineOpts = CmdlineOpts
   { co_inputFile :: !(Maybe FilePath),
     co_beamerHeader :: Maybe FilePath,
-    co_outputs :: !(Set.Set OutputMode),
+    co_outputs :: !(S.Set OutputMode),
     co_debug :: !Bool,
     co_verbose :: !Bool,
     co_quiet :: !Bool,
@@ -48,12 +48,13 @@ cmdlineOptsParser = do
         <> metavar "MODES"
         <> help
           ( T.unpack
-              ("Comma-separated list of output modes (" <> showOutputModes allOutputModes <> ")")
+              ( "Comma-separated list of output modes (" <> showOutputModes allOutputModes
+                  <> "), default: html"
+              )
           )
-        <> value (Set.singleton OutputHtml)
-        <> showDefaultWith (T.unpack . showOutputModes)
+        <> value S.empty
   moreOutputs <-
-    flip traverse (Set.toList allOutputModes) $ \mode -> do
+    flip traverse (S.toList allOutputModes) $ \mode -> do
       enable <-
         switch $
           long (T.unpack $ showOutputMode mode)
@@ -94,8 +95,10 @@ cmdlineOptsParser = do
           <> help "Input file in extended markdown format"
   pure $
     let co_outputs =
-          outputs
-            `Set.union` (Set.fromList (map snd (filter fst moreOutputs)))
+          let s =
+                outputs
+                  `S.union` (S.fromList (map snd (filter fst moreOutputs)))
+           in if S.null s then S.singleton OutputHtml else s
      in CmdlineOpts {..}
 
 cmdlineOptsParserInfo :: ParserInfo CmdlineOpts
