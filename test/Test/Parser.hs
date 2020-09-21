@@ -1,7 +1,10 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
-module Test.Parser where
+module Test.Parser
+  ( htf_thisModulesTests,
+  )
+where
 
 import qualified Data.Map as M
 import qualified Data.Text as T

@@ -1,6 +1,22 @@
-module Test.TestBuildConfig where
+{-# LANGUAGE QuasiQuotes #-}
+{-# OPTIONS_GHC -F -pgmF htfpp #-}
 
+module Test.TestBuildConfig
+  ( testBuildConfig,
+    testBuildArgs,
+    htf_thisModulesTests,
+  )
+where
+
+import BuildConfig
+import qualified Data.Aeson as J
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as M
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Vector as V
+import Test.Framework
+import Text.Heredoc
 import Types
 
 testBuildConfig :: [AnyPluginConfig m] -> GenericBuildConfig m
@@ -17,3 +33,31 @@ testBuildConfig plugins =
 
 testBuildArgs :: BuildArgs
 testBuildArgs = BuildArgs {ba_inputFile = "sample.md"}
+
+test_parseExternalLangConfig :: IO ()
+test_parseExternalLangConfig = do
+  assertEqual (Right expected) (J.eitherDecode' (BSL.fromStrict $ T.encodeUtf8 sampleInput))
+  where
+    expected =
+      ExternalLangConfigs $
+        V.singleton $
+          ExternalLangConfig
+            { elc_name = "python-repl",
+              elc_fileExt = ".py",
+              elc_commentStart = "#",
+              elc_commentEnd = Nothing,
+              elc_syntaxFile = Just "syntax/python-repl.xml"
+            }
+
+sampleInput :: T.Text
+sampleInput =
+  [here|
+{ "languages": [
+    { "name": "python-repl",
+      "syntaxFile": "syntax/python-repl.xml",
+      "extension": ".py",
+      "commentStart": "#"
+    }
+  ]
+}
+|]

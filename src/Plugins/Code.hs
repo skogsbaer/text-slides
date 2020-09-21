@@ -10,7 +10,7 @@ simply places to same content in the markdown file. The p_forAllCalls action (in
 generating the main output document) then writes to code snippets into the appropriate
 files.
 -}
-module Plugins.Code (codePlugins) where
+module Plugins.Code (codePlugins, LangConfig (..)) where
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -210,8 +210,8 @@ data LangConfig = LangConfig
 lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
 
-codePlugins :: [AnyPluginConfig Action]
-codePlugins = flip map languages $ \(name, langCfg) ->
+codePlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
+codePlugins moreLangs = flip map (languages ++ moreLangs) $ \(name, langCfg) ->
   AnyPluginConfig $ mkCodePlugin (PluginName name) langCfg
 
 languages :: [(T.Text, LangConfig)]

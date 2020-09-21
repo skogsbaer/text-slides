@@ -7,6 +7,7 @@ import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Development.Shake
 import Safe
 import System.FilePath
@@ -53,6 +54,11 @@ data BuildArgs = BuildArgs
 
 type PluginMap m = M.Map PluginName (AnyPluginConfig m)
 
+data SyntaxTheme
+  = SyntaxThemeName T.Text
+  | SyntaxThemeFile FilePath
+  deriving (Show)
+
 data GenericBuildConfig m = BuildConfig
   { bc_buildDir :: FilePath,
     bc_pandoc :: FilePath,
@@ -60,6 +66,8 @@ data GenericBuildConfig m = BuildConfig
     bc_convert :: FilePath, -- imagemagick
     bc_mermaid :: FilePath,
     bc_beamerHeader :: Maybe FilePath,
+    bc_syntaxTheme :: Maybe SyntaxTheme,
+    bc_syntaxDefFiles :: V.Vector FilePath,
     bc_plugins :: PluginMap m
   }
   deriving (Show)

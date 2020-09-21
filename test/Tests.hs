@@ -9,6 +9,7 @@ import Test.Framework.TestManager
 {- In Vim sort block with V}:sort #-}
 import {-@ HTF_TESTS @-} Test.Keynote
 import {-@ HTF_TESTS @-} Test.Parser
+import {-@ HTF_TESTS @-} Test.TestBuildConfig
 import {-@ HTF_TESTS @-} Test.Transform
 
 main :: IO ()

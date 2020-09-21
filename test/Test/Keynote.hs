@@ -1,7 +1,10 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
-module Test.Keynote where
+module Test.Keynote
+  ( htf_thisModulesTests,
+  )
+where
 
 import Plugins.Keynote
 import System.Directory

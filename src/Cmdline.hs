@@ -30,6 +30,7 @@ showOutputModes modes =
 data CmdlineOpts = CmdlineOpts
   { co_inputFile :: !(Maybe FilePath),
     co_beamerHeader :: Maybe FilePath,
+    co_syntaxTheme :: Maybe FilePath,
     co_outputs :: !(S.Set OutputMode),
     co_debug :: !Bool,
     co_verbose :: !Bool,
@@ -83,8 +84,19 @@ cmdlineOptsParser = do
         long "beamer-header"
           <> metavar "FILE"
           <> help
-            ( "File to insert into the header of a beamer presenation. Can also be set by "
+            ( "File to insert into the header of a beamer presentation. Can also be set by "
                 ++ "placing the file beamer-header.tex next to the input file or inside "
+                ++ "$HOME/.text-slides."
+            )
+  co_syntaxTheme <-
+    optional $
+      option str $
+        long "syntax-theme"
+          <> metavar "NAME_OF_THEME|FILE"
+          <> help
+            ( "Name of a syntax highlighting theme or file with a defintion of a syntax "
+                ++ "highlighting theme. A file defining such a theme can also be set by placing"
+                ++ "the file syntax-highlighting.theme next to the input file or inside "
                 ++ "$HOME/.text-slides."
             )
   -- inputFile should come last
@@ -92,7 +104,10 @@ cmdlineOptsParser = do
     optional $
       strArgument $
         metavar "INPUT_FILE.md"
-          <> help "Input file in extended markdown format"
+          <> help
+            ( "Input file in extended markdown format. Can be omitted if the current directory"
+                ++ " contains exactly one file with extension .md"
+            )
   pure $
     let co_outputs =
           let s =

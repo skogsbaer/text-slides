@@ -69,12 +69,24 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
   deps <- liftIO $ getDependenciesFromPandocJson inFile
   -- The deps are relative to the build dir
   need (map (\x -> bc_buildDir cfg </> x) deps)
+  syntaxDefs <-
+    flip mapM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
+      need [f]
+      return ("--syntax-definition=" ++ f)
+  hightlightTheme <-
+    forM (bc_syntaxTheme cfg) $ \x -> do
+      case x of
+        SyntaxThemeName name -> return (T.unpack name)
+        SyntaxThemeFile f -> do
+          need [f]
+          return f
   let commonPandocArgs =
-        [ "--from=json",
-          "--slide-level=2",
-          "--highlight-style=haddock",
-          "--output=" ++ outFile
-        ]
+        syntaxDefs
+          ++ [ "--from=json",
+               "--slide-level=2",
+               "--highlight-style=" ++ fromMaybe "haddock" hightlightTheme,
+               "--output=" ++ outFile
+             ]
       latexArgs = do
         forM_ (bc_beamerHeader cfg) $ \x -> need [x]
         return $

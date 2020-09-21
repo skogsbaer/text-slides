@@ -1,7 +1,10 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
-module Test.Transform where
+module Test.Transform
+  ( htf_thisModulesTests,
+  )
+where
 
 import CoreRules
 import qualified Data.Text as T

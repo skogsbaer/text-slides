@@ -56,7 +56,9 @@ tests:
     main: Tests.hs
     source-dirs: test
     dependencies:
+      - aeson
       - base
+      - bytestring
       - containers
       - directory
       - extra
@@ -67,6 +69,7 @@ tests:
       - text-slides
       - text
       - transformers
+      - vector
     build-tools: HTF
 
 ghc-options:

@@ -1,12 +1,20 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module BuildConfig
   ( getBuildConfig,
+    ExternalLangConfig (..),
+    ExternalLangConfigs (..),
   )
 where
 
 import Cmdline
 import Control.Monad
+import Data.Aeson ((.:), (.:?))
+import qualified Data.Aeson as J
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import qualified Data.Text as T
+import qualified Data.Vector as V
 import Development.Shake hiding (doesFileExist)
 import Logging
 import Plugins.Code
@@ -16,27 +24,55 @@ import System.Directory
 import System.FilePath
 import Types
 
-allPlugins :: [AnyPluginConfig Action]
-allPlugins = [keynotePlugin, mermaidPlugin] ++ codePlugins
+allPlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
+allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
 
-defaultBuildConfig :: BuildConfig
-defaultBuildConfig =
+defaultBuildConfig ::
+  [(T.Text, LangConfig)] -> [FilePath] -> Maybe FilePath -> Maybe SyntaxTheme -> BuildConfig
+defaultBuildConfig moreLanguages syntaxDefFiles beamerHeader syntaxTheme =
   BuildConfig
     { bc_buildDir = "build",
       bc_pandoc = "pandoc",
       bc_python = "python3",
       bc_convert = "convert",
       bc_mermaid = "mmdc",
-      bc_beamerHeader = Nothing,
+      bc_beamerHeader = beamerHeader,
+      bc_syntaxTheme = syntaxTheme,
       bc_plugins =
-        M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) allPlugins
+        M.fromList $
+          map
+            (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
+            (allPlugins moreLanguages),
+      bc_syntaxDefFiles = V.fromList syntaxDefFiles
     }
+
+getHomeCfgDir :: IO FilePath
+getHomeCfgDir = do
+  home <- getHomeDirectory
+  return $ home </> ".text-slides"
 
 getBuildConfig :: CmdlineOpts -> IO BuildConfig
 getBuildConfig opts = do
   beamerHeader <- searchFile "beamer-header.tex" (co_beamerHeader opts) >>= canonicalize
   infoIO ("beamerHeader: " ++ show beamerHeader)
-  return $ defaultBuildConfig {bc_beamerHeader = beamerHeader}
+  syntaxTheme <- do
+    mf <- searchFile "syntax-highlighting.theme" (co_syntaxTheme opts)
+    case mf of
+      Nothing -> return Nothing
+      Just f -> do
+        b <- doesFileExist f
+        if b
+          then (Just . SyntaxThemeFile) <$> canonicalizePath f
+          else return (Just $ SyntaxThemeName (T.pack f))
+  infoIO ("syntaxHighlighting: " ++ show syntaxTheme)
+  externalCfgs <- V.toList . unExternalLangConfigs <$> getExternLangConfigs
+  infoIO ("External code plugins: " ++ show externalCfgs)
+  return $
+    defaultBuildConfig
+      (map languageFromExternal externalCfgs)
+      (mapMaybe elc_syntaxFile externalCfgs)
+      beamerHeader
+      syntaxTheme
   where
     canonicalize Nothing = return Nothing
     canonicalize (Just p) = do
@@ -45,10 +81,9 @@ getBuildConfig opts = do
     searchFile :: FilePath -> Maybe FilePath -> IO (Maybe FilePath)
     searchFile _ (Just fromCmdLine) = return $ Just fromCmdLine
     searchFile path Nothing = do
-      home <- getHomeDirectory
       current <- getCurrentDirectory
-      let homeCfgDir = home </> ".text-slides"
-          candidates =
+      homeCfgDir <- getHomeCfgDir
+      let candidates =
             ( case co_inputFile opts of
                 Just f -> [takeDirectory f </> path]
                 Nothing -> [current </> path]
@@ -60,3 +95,55 @@ getBuildConfig opts = do
       case catMaybes results of
         [] -> return Nothing
         (x : _) -> return $ Just x
+    languageFromExternal cfg =
+      ( elc_name cfg,
+        LangConfig
+          { lc_fileExt = elc_fileExt cfg,
+            lc_commentStart = elc_commentStart cfg,
+            lc_commentEnd = elc_commentEnd cfg
+          }
+      )
+
+data ExternalLangConfig = ExternalLangConfig
+  { elc_name :: T.Text,
+    elc_fileExt :: String,
+    elc_commentStart :: T.Text,
+    elc_commentEnd :: Maybe T.Text,
+    elc_syntaxFile :: Maybe FilePath
+  }
+  deriving (Show, Eq)
+
+newtype ExternalLangConfigs = ExternalLangConfigs {unExternalLangConfigs :: V.Vector ExternalLangConfig}
+  deriving (Show, Eq)
+
+instance J.FromJSON ExternalLangConfig where
+  parseJSON = J.withObject "ExternalLangConfig" $ \v -> do
+    elc_name <- v .: "name"
+    elc_syntaxFile <- v .:? "syntaxFile"
+    elc_fileExt <- v .: "extension"
+    elc_commentStart <- v .: "commentStart"
+    elc_commentEnd <- v .:? "commentEnd"
+    return ExternalLangConfig {..}
+
+instance J.FromJSON ExternalLangConfigs where
+  parseJSON = J.withObject "ExternalLangConfigs" $ \v -> do
+    langs <- v .: "languages"
+    return $ ExternalLangConfigs langs
+
+getExternLangConfigs :: IO ExternalLangConfigs
+getExternLangConfigs = do
+  homeCfgDir <- getHomeCfgDir
+  let f = homeCfgDir </> "code.json"
+  b <- doesFileExist f
+  if not b
+    then return $ ExternalLangConfigs V.empty
+    else loadExternalLangConfigs f
+  where
+    loadExternalLangConfigs f = do
+      res <- J.eitherDecodeFileStrict f
+      case res of
+        Left err -> fail ("Error parsing contents of " ++ f ++ ": " ++ err)
+        Right (ExternalLangConfigs vs) ->
+          return $ ExternalLangConfigs $ V.map (makeRel (takeDirectory f)) vs
+    makeRel dir cfg =
+      cfg {elc_syntaxFile = fmap (\x -> dir </> x) (elc_syntaxFile cfg)}

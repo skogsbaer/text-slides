@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2449d28bcf6f716520d0f595ae566e5fbb627bedfed813e8909258b0c610436f
+-- hash: cd051c1a542342ae568e7e90b9aaa830c7bc35b81fae3688fc02eb48f4ed3d4d
 
 name:           text-slides
 version:        0.1
@@ -105,7 +105,9 @@ test-suite unit-tests
       HTF:HTF
   build-depends:
       HTF
+    , aeson
     , base
+    , bytestring
     , containers
     , directory
     , extra
@@ -115,4 +117,5 @@ test-suite unit-tests
     , text
     , text-slides
     , transformers
+    , vector
   default-language: Haskell2010
