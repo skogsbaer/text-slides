@@ -46,9 +46,14 @@ getBuildConfig opts = do
     searchFile _ (Just fromCmdLine) = return $ Just fromCmdLine
     searchFile path Nothing = do
       home <- getHomeDirectory
+      current <- getCurrentDirectory
       let homeCfgDir = home </> ".text-slides"
           candidates =
-            [takeDirectory (co_inputFile opts) </> path, homeCfgDir </> path]
+            ( case co_inputFile opts of
+                Just f -> [takeDirectory f </> path]
+                Nothing -> [current </> path]
+            )
+              ++ [homeCfgDir </> path]
       results <- forM candidates $ \cand -> do
         b <- doesFileExist cand
         return $ if b then Just cand else Nothing

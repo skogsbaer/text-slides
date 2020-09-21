@@ -49,9 +49,25 @@ cleanupShakeFiles shakeDir curVersion = do
 main :: IO ()
 main = do
   opts <- parseCmdlineArgs
-  exists <- doesFileExist (co_inputFile opts)
+  inputFile <-
+    case co_inputFile opts of
+      Just f -> return f
+      Nothing -> do
+        files <- myListDirectory "." (\f -> takeExtension f == ".md")
+        case files of
+          [f] -> return f
+          [] -> do
+            putStrLn ("No input file given and no .md file exists in current directory.")
+            exitWith (ExitFailure 1)
+          files -> do
+            putStrLn
+              ( "No input file given and multiple .md file exist in current directory: "
+                  ++ show files
+              )
+            exitWith (ExitFailure 1)
+  exists <- doesFileExist inputFile
   when (not exists) $ do
-    putStrLn $ "Input file " ++ co_inputFile opts ++ " does not exist, aborting!"
+    putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
     exitWith (ExitFailure 1)
   let logLevel =
         if
@@ -63,7 +79,7 @@ main = do
   cfg <- getBuildConfig opts
   let args =
         BuildArgs
-          { ba_inputFile = co_inputFile opts
+          { ba_inputFile = inputFile
           }
       targets =
         flip map (S.toList (co_outputs opts)) $ \mode ->

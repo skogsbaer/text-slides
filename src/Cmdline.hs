@@ -28,7 +28,7 @@ showOutputModes modes =
   T.intercalate "," (map showOutputMode $ Set.toList modes)
 
 data CmdlineOpts = CmdlineOpts
-  { co_inputFile :: !FilePath,
+  { co_inputFile :: !(Maybe FilePath),
     co_beamerHeader :: Maybe FilePath,
     co_outputs :: !(Set.Set OutputMode),
     co_debug :: !Bool,
@@ -88,9 +88,10 @@ cmdlineOptsParser = do
             )
   -- inputFile should come last
   co_inputFile <-
-    strArgument $
-      metavar "INPUT_FILE.md"
-        <> help "Input file in extended markdown format"
+    optional $
+      strArgument $
+        metavar "INPUT_FILE.md"
+          <> help "Input file in extended markdown format"
   pure $
     let co_outputs =
           outputs
