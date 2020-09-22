@@ -188,15 +188,35 @@ sequenceDiagram
 
 ## Configuration
 
-### Header file for beamer presentations.
+### Header file for beamer presentations
 
 You can specify a file to be included in the header of the latex file for beamer
 presentations, see Pandoc's `--include-in-header` option. The file can be specified
 in the following three ways:
 
 - Command line flag `--beamer-header FILE`.
-- A file name `beamer-header.tex` in the same directory as the input file.
+- A file named `beamer-header.tex` in the same directory as the input file.
 - Through the file `$HOME/.text-slides/beamer-header.tex`.
+
+### Header file for HTML presentations
+
+You can specify a file to be included in the header of the HTML file for beamer
+presentations, see Pandoc's `--include-in-header` option. The file can be specified
+in the following three ways:
+
+- Command line flag `--html-header FILE`.
+- A file named `html-header.tex` in the same directory as the input file.
+- Through the file `$HOME/.text-slides/html-header.tex`.
+
+### Lua filters
+
+You can specify a file defining lua filters for pandoc,
+see Pandoc's `--lua-filter` option. The file can be specified
+in the following three ways:
+
+- Command line flag `--lua-filter FILE`.
+- A file named `pandoc-filter.lua` in the same directory as the input file.
+- Through the file `$HOME/.text-slides/pandoc-filter.lua`.
 
 ### More code plugins
 

@@ -30,6 +30,8 @@ showOutputModes modes =
 data CmdlineOpts = CmdlineOpts
   { co_inputFile :: !(Maybe FilePath),
     co_beamerHeader :: Maybe FilePath,
+    co_htmlHeader :: Maybe FilePath,
+    co_luaFilter :: Maybe FilePath,
     co_syntaxTheme :: Maybe FilePath,
     co_outputs :: !(S.Set OutputMode),
     co_debug :: !Bool,
@@ -86,6 +88,26 @@ cmdlineOptsParser = do
           <> help
             ( "File to insert into the header of a beamer presentation. Can also be set by "
                 ++ "placing the file beamer-header.tex next to the input file or inside "
+                ++ "$HOME/.text-slides."
+            )
+  co_htmlHeader <-
+    optional $
+      option str $
+        long "html-header"
+          <> metavar "FILE"
+          <> help
+            ( "File to insert into the header of a html presentation. Can also be set by "
+                ++ "placing the file html-header.html next to the input file or inside "
+                ++ "$HOME/.text-slides."
+            )
+  co_luaFilter <-
+    optional $
+      option str $
+        long "lua-filter"
+          <> metavar "FILE"
+          <> help
+            ( "Lua filter for pandoc. Can also be set by "
+                ++ "placing the file pandoc-filter.lua next to the input file or inside "
                 ++ "$HOME/.text-slides."
             )
   co_syntaxTheme <-

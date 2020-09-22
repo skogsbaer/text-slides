@@ -28,8 +28,14 @@ allPlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
 allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
 
 defaultBuildConfig ::
-  [(T.Text, LangConfig)] -> [FilePath] -> Maybe FilePath -> Maybe SyntaxTheme -> BuildConfig
-defaultBuildConfig moreLanguages syntaxDefFiles beamerHeader syntaxTheme =
+  [(T.Text, LangConfig)] ->
+  [FilePath] ->
+  Maybe FilePath ->
+  Maybe FilePath ->
+  Maybe FilePath ->
+  Maybe SyntaxTheme ->
+  BuildConfig
+defaultBuildConfig moreLanguages syntaxDefFiles beamerHeader htmlHeader luaFilter syntaxTheme =
   BuildConfig
     { bc_buildDir = "build",
       bc_pandoc = "pandoc",
@@ -37,6 +43,8 @@ defaultBuildConfig moreLanguages syntaxDefFiles beamerHeader syntaxTheme =
       bc_convert = "convert",
       bc_mermaid = "mmdc",
       bc_beamerHeader = beamerHeader,
+      bc_htmlHeader = htmlHeader,
+      bc_luaFilter = luaFilter,
       bc_syntaxTheme = syntaxTheme,
       bc_plugins =
         M.fromList $
@@ -55,6 +63,10 @@ getBuildConfig :: CmdlineOpts -> IO BuildConfig
 getBuildConfig opts = do
   beamerHeader <- searchFile "beamer-header.tex" (co_beamerHeader opts) >>= canonicalize
   infoIO ("beamerHeader: " ++ show beamerHeader)
+  htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
+  infoIO ("htmlHeader: " ++ show htmlHeader)
+  luaFilter <- searchFile "pandoc-filter.lua" (co_luaFilter opts) >>= canonicalize
+  infoIO ("luaFilter: " ++ show luaFilter)
   syntaxTheme <- do
     mf <- searchFile "syntax-highlighting.theme" (co_syntaxTheme opts)
     case mf of
@@ -72,6 +84,8 @@ getBuildConfig opts = do
       (map languageFromExternal externalCfgs)
       (mapMaybe elc_syntaxFile externalCfgs)
       beamerHeader
+      htmlHeader
+      luaFilter
       syntaxTheme
   where
     canonicalize Nothing = return Nothing

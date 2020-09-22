@@ -80,6 +80,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .pdf -} = do
         SyntaxThemeFile f -> do
           need [f]
           return f
+  needIfSet (bc_luaFilter cfg)
   let commonPandocArgs =
         syntaxDefs
           ++ [ "--from=json",
@@ -88,27 +89,33 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .pdf -} = do
                "--output=" ++ outFile,
                "--resource-path=" ++ bc_buildDir cfg
              ]
+          ++ optIfSet "--lua-filter=" (bc_luaFilter cfg)
       latexArgs = do
-        forM_ (bc_beamerHeader cfg) $ \x -> need [x]
+        needIfSet (bc_beamerHeader cfg)
         return $
           ["--to=beamer"]
-            ++ ( case bc_beamerHeader cfg of
-                   Just f -> ["--include-in-header=" ++ f]
-                   Nothing -> []
-               )
-  modePandocArgs <-
-    case mode of
-      OutputHtml ->
-        return
+            ++ optIfSet "--include-in-header=" (bc_beamerHeader cfg)
+      htmlArgs = do
+        needIfSet (bc_htmlHeader cfg)
+        return $
           [ "--to=slidy",
             "--mathjax",
             "--standalone"
           ]
+            ++ optIfSet "--include-in-header=" (bc_htmlHeader cfg)
+  modePandocArgs <-
+    case mode of
+      OutputHtml -> htmlArgs
       OutputPdf -> latexArgs
       OutputLatex -> latexArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO (bc_pandoc cfg) pandocArgs
+  where
+    needIfSet (Just x) = need [x]
+    needIfSet Nothing = return ()
+    optIfSet prefix (Just x) = [prefix ++ x]
+    optIfSet _ Nothing = []
 
 data AnyPluginWithState action
   = forall state.
