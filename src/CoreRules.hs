@@ -63,12 +63,12 @@ getDependenciesFromPandocJson inFile = do
               _ -> Nothing
       | otherwise = Nothing
 
-runPandoc :: GenericBuildConfig m -> OutputMode -> FilePath -> FilePath -> Action ()
-runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
+runPandoc :: GenericBuildConfig m -> BuildArgs -> OutputMode -> FilePath -> FilePath -> Action ()
+runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .pdf -} = do
   need [inFile]
   deps <- liftIO $ getDependenciesFromPandocJson inFile
   -- The deps are relative to the build dir
-  need (map (\x -> bc_buildDir cfg </> x) deps)
+  need (map (\f -> bc_buildDir cfg </> f) deps)
   syntaxDefs <-
     flip mapM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
       need [f]
@@ -85,12 +85,13 @@ runPandoc cfg mode inFile {- .json -} outFile {- .html or .pdf -} = do
           ++ [ "--from=json",
                "--slide-level=2",
                "--highlight-style=" ++ fromMaybe "haddock" hightlightTheme,
-               "--output=" ++ outFile
+               "--output=" ++ outFile,
+               "--resource-path=" ++ bc_buildDir cfg
              ]
       latexArgs = do
         forM_ (bc_beamerHeader cfg) $ \x -> need [x]
         return $
-          ["--to=beamer", "--resource-path=" ++ bc_buildDir cfg]
+          ["--to=beamer"]
             ++ ( case bc_beamerHeader cfg of
                    Just f -> ["--include-in-header=" ++ f]
                    Nothing -> []
@@ -202,14 +203,19 @@ generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
 coreRules :: BuildConfig -> BuildArgs -> Rules ()
 coreRules cfg args = do
   forM_ [minBound .. maxBound :: OutputMode] $ \mode ->
-    outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg mode json
+    outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg args mode json
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
   sequence_ $ map (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
+  bc_buildDir cfg </> "*.png" %> publishStaticFile
+  bc_buildDir cfg </> "*.jpg" %> publishStaticFile
   where
     outFile ext = mainOutputFile cfg args ext
     raw = outFile mdRawExt
     json = outFile ".json"
+    publishStaticFile out = do
+      let f = takeDirectory (ba_inputFile args) </> takeFileName out
+      copyFileChanged f out
 
 mdRawExt :: String
 mdRawExt = ".mdraw"
