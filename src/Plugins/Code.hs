@@ -35,11 +35,15 @@ data LineNumberMode = LineNumbersOff | LineNumbersOn | LineNumbersAuto
 data FirstLine = FirstLineImplicit | FirstLineExplicit Int | FirstLineContinue
   deriving (Eq, Show)
 
+data CodePlace = AtStart | Here | AtEnd
+  deriving (Eq, Show)
+
 data CodeArgs = CodeArgs
   { ca_file :: Maybe FilePath,
     ca_mode :: CodeMode,
     ca_lineNumberMode :: LineNumberMode,
-    ca_firstLine :: FirstLine
+    ca_firstLine :: FirstLine,
+    ca_place :: CodePlace
   }
 
 parseArgs :: PluginCall -> Fail CodeArgs
@@ -47,6 +51,7 @@ parseArgs call = do
   file <- getOptionalStringValue loc "file" m
   modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
   lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
+  placeStr <- getOptionalEnumValue loc "place" ["atStart", "here", "atEnd"] m
   mode <-
     case modeStr of
       Just "show" -> return CodeModeShow
@@ -61,19 +66,27 @@ parseArgs call = do
       Just "auto" -> return LineNumbersAuto
       Nothing -> return LineNumbersAuto
       Just x -> error $ "uncovered case: " ++ show x
+  place <-
+    case placeStr of
+      Just "atStart" -> return AtStart
+      Just "here" -> return Here
+      Just "atEnd" -> return AtEnd
+      Nothing -> return Here
+      Just x -> error $ "uncovered case: " ++ show x
   firstLineM <- getOptionalValue loc "firstLine" m "Int or \"continue\"" $ \v ->
     case v of
       ArgInt i -> Just $ FirstLineExplicit i
       ArgString "continue" -> Just $ FirstLineContinue
       _ -> Nothing
   let firstLine = fromMaybe FirstLineImplicit firstLineM
-  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine"]
+  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine", "place"]
   return $
     CodeArgs
       { ca_file = fmap T.unpack file,
         ca_mode = mode,
         ca_lineNumberMode = lineNum,
-        ca_firstLine = firstLine
+        ca_firstLine = firstLine,
+        ca_place = place
       }
   where
     loc = pc_location call
@@ -144,6 +157,29 @@ data CollectedCode = CollectedCode
   }
   deriving (Eq, Show)
 
+data CollectedCodeFile = CollectedCodeFile
+  { ccf_atStart :: [CollectedCode], -- reversed
+    ccf_here :: [CollectedCode], -- reversed
+    ccf_atEnd :: [CollectedCode] -- reversed
+  }
+
+emptyCollectedCodeFile :: CollectedCodeFile
+emptyCollectedCodeFile = CollectedCodeFile [] [] []
+
+mkCollectedCodeFile :: CollectedCode -> CodePlace -> CollectedCodeFile
+mkCollectedCodeFile cc place =
+  case place of
+    AtStart -> emptyCollectedCodeFile {ccf_atStart = [cc]}
+    Here -> emptyCollectedCodeFile {ccf_here = [cc]}
+    AtEnd -> emptyCollectedCodeFile {ccf_atEnd = [cc]}
+
+appendCollectedCode :: CollectedCode -> CodePlace -> CollectedCodeFile -> CollectedCodeFile
+appendCollectedCode cc place file =
+  case place of
+    AtStart -> file {ccf_atStart = cc : ccf_atStart file}
+    Here -> file {ccf_here = cc : ccf_here file}
+    AtEnd -> file {ccf_atEnd = cc : ccf_atEnd file}
+
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls langCfg cfg buildArgs calls = do
@@ -155,37 +191,44 @@ processAllCalls langCfg cfg buildArgs calls = do
               <> " on "
               <> showText time
           )
-  forM_ (M.toList codeMap) $ \(file, revCode) -> do
-    let groupedBySectionName =
-          L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) (reverse revCode)
-        code =
-          T.unlines $
-            flip concatMap groupedBySectionName $ \ccs ->
-              case ccs of
-                [] -> []
-                (cc : _) ->
-                  ( case cc_sectionName cc of
-                      Just x ->
-                        let line = T.replicate (T.length x) "-"
-                         in ["", "", cmt line, cmt x, cmt line]
-                      Nothing -> []
-                  )
-                    ++ map cc_code ccs
+  forM_ (M.toList codeMap) $ \(file, ccf) -> do
+    let code = mkCode (ccf_atStart ccf) <> mkCode (ccf_here ccf) <> mkCode (ccf_atEnd ccf)
     lift $ note ("Generating " ++ file)
     lift $ myWriteFile file (header <> code)
   where
     cmt = lineComment langCfg
+    mkCode :: [CollectedCode] -> T.Text
+    mkCode revCode =
+      let groupedBySectionName =
+            L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) (reverse revCode)
+          code =
+            T.unlines $
+              flip concatMap groupedBySectionName $ \ccs ->
+                case ccs of
+                  [] -> []
+                  (cc : _) ->
+                    ( case cc_sectionName cc of
+                        Just x ->
+                          let line = T.replicate (T.length x) "-"
+                           in ["", "", cmt line, cmt x, cmt line]
+                        Nothing -> []
+                    )
+                      ++ map cc_code ccs
+       in code
     collectCode ::
-      M.Map FilePath [CollectedCode] ->
+      M.Map FilePath CollectedCodeFile ->
       PluginCall ->
-      Fail (M.Map FilePath [CollectedCode])
+      Fail (M.Map FilePath CollectedCodeFile)
     collectCode m call = do
       (file, mCode) <- codeFromCall call
       case mCode of
         Nothing -> return m
-        Just code ->
-          return $ M.insertWith (++) file [CollectedCode code (pc_sectionName call)] m
-    codeFromCall :: PluginCall -> Fail (FilePath, Maybe T.Text)
+        Just (place, code) ->
+          let cc = CollectedCode code (pc_sectionName call)
+           in case M.lookup file m of
+                Just ccf -> return $ M.insert file (appendCollectedCode cc place ccf) m
+                Nothing -> return $ M.insert file (mkCollectedCodeFile cc place) m
+    codeFromCall :: PluginCall -> Fail (FilePath, Maybe (CodePlace, T.Text))
     codeFromCall call = do
       args <- parseArgs call
       let baseFile =
@@ -198,7 +241,7 @@ processAllCalls langCfg cfg buildArgs calls = do
       let mCode =
             case ca_mode args of
               CodeModeShowOnly -> Nothing
-              _ -> Just code
+              _ -> Just (ca_place args, code)
       return (file, mCode)
 
 data LangConfig = LangConfig

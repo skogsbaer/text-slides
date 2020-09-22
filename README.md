@@ -105,9 +105,14 @@ code is displayed on the slides and extracted. Mode `"hide"` extracts the code b
 show it on the slides, `"showOnly"` shows the code on the slides but does not extract it.
 * `lineNumbers` (optional string): one of `"on"`, `"off"` or `"auto"`. The default is `"auto"`:
 line numbers are printed if the code is more than 5 lines long.
-* `firstLine` (option string or int): determines the starting line number. An int simply sets
+* `firstLine` (optional string or int): determines the starting line number. An int simply sets
 the number of the first line. The string `"continue"` resumes line numbering where
 the last code block left off.
+* `place` (optional string): determines where in the output file the code is placed.
+The default is "here", which respects to ordering of the code snippets in the markdown file.
+"atEnd" place the code snippet at the of the code file, if several snippets are marked with
+"atEnd", then their ordering in the markdown file is preservered. Similarly, "atStart" places
+the code snippet at the beginning of the code file.
 
 #### Example
 
@@ -117,7 +122,9 @@ print("Hello World!")
 ~~~
 ```
 
-Writes the code the `build/plugins/python/foo.py` and hides it from the presentation.
+Writes the code to `build/plugins/python/foo.py` and hides it from the presentation.
+
+See section "More code plugins" for how to configure additional code plugins.
 
 ### keynote
 
