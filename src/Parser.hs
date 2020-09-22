@@ -35,7 +35,7 @@ symbolP = void . L.symbol spaceP
 someSymbolP :: Parser T.Text
 someSymbolP = do
   first <- P.letterChar
-  rest <- P.many (P.satisfy (\c -> isAlphaNum c || c == '_'))
+  rest <- P.many (P.satisfy (\c -> isAlphaNum c || c == '_' || c == '-'))
   return $ T.pack (first : rest)
 
 pluginCallPrefixP :: Parser PluginName
