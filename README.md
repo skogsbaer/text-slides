@@ -22,7 +22,7 @@ To
 render it as PDF use
 
 ~~~
-text-slides --output-mode pdf example/sample-talk.md
+text-slides --pdf example/sample-talk.md
 ~~~
 
 ## Plugins
@@ -250,3 +250,10 @@ text-slides is the `haddock` theme. Here's how to use a different theme:
 
 For a theme include with pandoc, you can save to definition to a file with this command:
 `pandoc --print-highlight-style NAME_OF_THEME > FILE`
+
+## Performance
+
+To speed up PDF generation, supply a custom latex header (see above) and insert
+the command `\endofdump` at the end. text-slides then uses
+[mylatexformat](https://ctan.org/pkg/mylatexformat?lang=de) to "precompile" the preamble.
+In my Macbook Pro (2019), this gave a speed up of about 1s.

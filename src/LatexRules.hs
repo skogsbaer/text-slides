@@ -63,8 +63,6 @@ genPdf cfg pdf = do
               note $ "Re-running latex, reason: " ++ T.unpack phrase
               runPdfLatex (runNo + 1)
 
--- FIXME: rerun if necessary
-
 splitPreamble :: FilePath -> T.Text -> Maybe (T.Text, T.Text)
 splitPreamble outFile src =
   case L.break isEndOfPreamble (T.lines src) of
