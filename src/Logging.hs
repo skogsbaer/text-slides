@@ -70,40 +70,48 @@ isTrace =
 doLog :: LogLevel -> String -> IO ()
 doLog ll msg =
   withMVar logLevelMVar $ \curLevel ->
-    when (ll >= curLevel) (hPutStrLn stderr msg >> hFlush stderr)
+    when (ll >= curLevel) (hPutStrLn stderr (levelPrefix ll ++ msg) >> hFlush stderr)
+
+levelPrefix :: LogLevel -> String
+levelPrefix ll =
+  case ll of
+    TRACE -> "[TRACE] "
+    DEBUG -> "[DEBUG] "
+    INFO -> "[INFO] "
+    _ -> ""
 
 trace :: String -> Action ()
 trace = liftIO . traceIO
 
 traceIO :: String -> IO ()
-traceIO msg = doLog TRACE ("[TRACE] " ++ msg)
+traceIO = doLog TRACE
 
 debug :: String -> Action ()
 debug = liftIO . debugIO
 
 debugIO :: String -> IO ()
-debugIO msg = doLog DEBUG ("[DEBUG] " ++ msg)
+debugIO = doLog DEBUG
 
 note :: String -> Action ()
 note = liftIO . noteIO
 
 noteIO :: String -> IO ()
-noteIO msg = doLog NOTE msg
+noteIO = doLog NOTE
 
 info :: String -> Action ()
 info = liftIO . infoIO
 
 infoIO :: String -> IO ()
-infoIO msg = doLog INFO ("[INFO] " ++ msg)
+infoIO = doLog INFO
 
 warn :: String -> Action ()
 warn = liftIO . warnIO
 
 warnIO :: String -> IO ()
-warnIO msg = doLog WARN msg
+warnIO = doLog WARN
 
 logError :: String -> Action ()
 logError = liftIO . logErrorIO
 
 logErrorIO :: String -> IO ()
-logErrorIO msg = doLog ERROR msg
+logErrorIO = doLog ERROR

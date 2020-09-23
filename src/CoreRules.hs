@@ -208,6 +208,7 @@ generateRawMarkdown cfg args inFile outFile = do
 generateJson :: BuildConfig -> FilePath -> FilePath -> Action ()
 generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
   need [inFile]
+  note $ "Generating " ++ outFile
   mySystem INFO (bc_pandoc cfg) ["--from=markdown", "--output=" ++ outFile, inFile]
 
 coreRules :: BuildConfig -> BuildArgs -> Rules ()

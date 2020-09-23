@@ -64,7 +64,7 @@ genTexPreamble texPreamble = do
   case splitPreamble texPreamble texSrc of
     Nothing -> myWriteFile texPreamble ""
     Just (preamble, _) -> do
-      note ("Generating " ++ texPreambleExt)
+      note ("Generating " ++ texPreamble)
       myWriteFile texPreamble preamble
 
 genFmt :: BuildConfig -> FilePath -> Action ()
