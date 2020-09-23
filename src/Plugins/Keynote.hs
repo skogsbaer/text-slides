@@ -131,8 +131,13 @@ runKeynoteExport cfg hashFile = do
   jpegs <- liftIO $ myListDirectory (outDir </> "slides") isJpegFile
   forM_ jpegs $ \jpeg ->
     let (d, f) = splitFileName jpeg
-     in mySystem INFO (bc_convert cfg) [jpeg, "-trim", d </> ("trimmed_" ++ f)]
+     in mySystem INFO (bc_convert cfg) [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
   myWriteFile hashFile (unHash hash)
+  where
+    fixImageFileName f =
+      -- latex does not like images ending with .001.jpeg
+      let slideNo = tail $ takeExtension (dropExtension f)
+       in "slides_" ++ slideNo ++ ".jpg"
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg _args = do
@@ -147,7 +152,7 @@ runPlugin cfg _buildArgs () call = do
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
   -- all output files are place directly in the build directory
   let relDir = makeRelative (bc_buildDir cfg) dir
-      imgFile = relDir </> "slides" </> printf "trimmed_slides.%03d.jpeg" (ka_slide args)
+      imgFile = relDir </> "slides" </> printf "trimmed_slides_%03d.jpg" (ka_slide args)
       dimensions =
         case catMaybes
           [ fmap (\w -> "width=" <> w) (ka_width args),
