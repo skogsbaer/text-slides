@@ -80,7 +80,7 @@ runMermaid cfg _buildArgs outFile = do
             ++ outFile
         )
       let args = map T.unpack (mc_args mermaidCall) ++ ["--input", mddFile, "--output", outFile]
-      mySystem INFO (bc_mermaid cfg) args
+      mySystem INFO (bc_mermaid cfg) args Nothing
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do

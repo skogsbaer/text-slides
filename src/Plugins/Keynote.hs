@@ -127,11 +127,15 @@ runKeynoteExport cfg hashFile = do
   note ("Exporting images from " ++ keyFile)
   hash <- needWithHash keyFile
   let exportArgs = [script, "-k", keyFile, "-o", outDir]
-  mySystem INFO (bc_python cfg) exportArgs
+  mySystem INFO (bc_python cfg) exportArgs Nothing
   jpegs <- liftIO $ myListDirectory (outDir </> "slides") isJpegFile
   forM_ jpegs $ \jpeg ->
     let (d, f) = splitFileName jpeg
-     in mySystem INFO (bc_convert cfg) [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
+     in mySystem
+          INFO
+          (bc_convert cfg)
+          [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
+          Nothing
   myWriteFile hashFile (unHash hash)
   where
     fixImageFileName f =

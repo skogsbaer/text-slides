@@ -1,10 +1,12 @@
 module LatexRules (latexRules) where
 
 import qualified Data.List as L
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Development.Shake
 import Logging
+import System.Environment
 import System.FilePath
 import Types
 import Utils
@@ -30,12 +32,26 @@ findPhrase _ [] = Nothing
 findPhrase t (x : xs) =
   if x `T.isInfixOf` t then Just x else findPhrase t xs
 
+mkLatexEnv :: BuildConfig -> IO Env
+mkLatexEnv cfg = do
+  oldEnv <- M.fromList . map (\(x, y) -> (T.pack x, T.pack y)) <$> liftIO getEnvironment
+  let sep = T.singleton searchPathSeparator
+      texInputs =
+        case M.lookup texInputsKey oldEnv of
+          Nothing -> T.pack (bc_buildDir cfg) <> sep <> ""
+          Just old -> T.pack (bc_buildDir cfg) <> sep <> old
+  return $ M.insert texInputsKey texInputs oldEnv
+  where
+    texInputsKey = "TEXINPUTS"
+
 genPdf :: BuildConfig -> FilePath -> Action ()
 genPdf cfg pdf = do
   need [pdf -<.> texBodyExt, pdf -<.> preambleCacheExt]
-  runPdfLatex 0
+  env <- liftIO $ mkLatexEnv cfg
+  note ("Generating " ++ pdf)
+  runPdfLatex env 0
   where
-    runPdfLatex runNo = do
+    runPdfLatex env runNo = do
       mySystem
         INFO
         (bc_pdflatex cfg)
@@ -46,6 +62,7 @@ genPdf cfg pdf = do
           bc_buildDir cfg,
           pdf -<.> texBodyExt
         ]
+        (Just env)
       -- check if we must re-run latex
       let logFile = pdf -<.> ".log"
       log <- liftIO $ T.readFile logFile -- do not depend on the log file
@@ -61,7 +78,7 @@ genPdf cfg pdf = do
                   ++ T.unpack phrase
             else do
               note $ "Re-running latex, reason: " ++ T.unpack phrase
-              runPdfLatex (runNo + 1)
+              runPdfLatex env (runNo + 1)
 
 splitPreamble :: FilePath -> T.Text -> Maybe (T.Text, T.Text)
 splitPreamble outFile src =
@@ -101,9 +118,10 @@ genFmt cfg fmt = do
   let texPreamble = fmt -<.> texPreambleExt
   preamble <- myReadFile texPreamble
   if preamble == ""
-    then mySystem INFO "touch" [fmt]
+    then mySystem INFO "touch" [fmt] Nothing
     else do
       let jobname = takeBaseName fmt
+      env <- liftIO $ mkLatexEnv cfg
       note ("Generating " ++ fmt)
       mySystem
         INFO
@@ -118,6 +136,7 @@ genFmt cfg fmt = do
           "mylatexformat.ltx",
           texPreamble
         ]
+        (Just env)
 
 latexRules :: BuildConfig -> BuildArgs -> Rules ()
 latexRules cfg _args = do

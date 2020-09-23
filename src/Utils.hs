@@ -1,12 +1,12 @@
 module Utils where
 
 import Control.Exception
-import Control.Monad
 import Control.Monad.IO.Class
 import qualified Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.List as L
+import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock
@@ -43,21 +43,25 @@ withDevNull action = do
   liftIO $ hClose h
   return res
 
-mySystem :: LogLevel -> FilePath -> [String] -> Action ()
-mySystem ll prog args = do
+type Env = M.Map T.Text T.Text
+
+mySystem :: LogLevel -> FilePath -> [String] -> Maybe Env -> Action ()
+mySystem ll prog args mEnv = do
   let cmd = unwords $ prog : args
   liftIO $ doLog ll cmd
   (secs, res) <-
     withTiming $
       traced (takeBaseName prog) $
         withDevNull $ \devNull -> do
-          let process = (proc prog args) {std_out = UseHandle devNull}
+          let myEnv = flip fmap mEnv $ \m -> map (\(x, y) -> (T.unpack x, T.unpack y)) $ M.toList m
+              process = (proc prog args) {std_out = UseHandle devNull, env = myEnv}
           (_, _, _, p) <- createProcess process
           waitForProcess p
   case res of
     ExitFailure i -> fail ("Command failed with exit code " ++ show i ++ ": " ++ cmd)
     ExitSuccess -> do
-      when (secs >= 0.25) $ note (printf "%.3fs: %s" secs cmd)
+      let perfMsg = printf "%.3fs: %s" secs cmd
+      if (secs >= 0.25) then note perfMsg else info perfMsg
       return ()
 
 myReadFileBs :: FilePath -> Action BS.ByteString
