@@ -13,7 +13,6 @@ import Development.Shake hiding (doesDirectoryExist, doesFileExist)
 import Logging
 import System.Directory
 import System.Environment
-import System.Exit
 import System.FilePath
 import Text.Printf
 import Types
@@ -50,26 +49,6 @@ cleanupShakeFiles shakeDir curVersion = do
 main :: IO ()
 main = do
   opts <- parseCmdlineArgs
-  inputFile <-
-    case co_inputFile opts of
-      Just f -> return f
-      Nothing -> do
-        files <- myListDirectory "." (\f -> takeExtension f == ".md")
-        case files of
-          [f] -> return f
-          [] -> do
-            putStrLn ("No input file given and no .md file exists in current directory.")
-            exitWith (ExitFailure 1)
-          files -> do
-            putStrLn
-              ( "No input file given and multiple .md file exist in current directory: "
-                  ++ show files
-              )
-            exitWith (ExitFailure 1)
-  exists <- doesFileExist inputFile
-  when (not exists) $ do
-    putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
-    exitWith (ExitFailure 1)
   let logLevel =
         if
             | co_debug opts -> DEBUG
@@ -77,12 +56,8 @@ main = do
             | co_quiet opts -> WARN
             | otherwise -> NOTE
   setLogLevel logLevel
-  cfg <- getBuildConfig opts
-  let args =
-        BuildArgs
-          { ba_inputFile = inputFile
-          }
-      targets =
+  (cfg, args) <- getBuildConfig opts
+  let targets =
         flip map (S.toList (co_outputs opts)) $ \mode ->
           mainOutputFile cfg args (T.unpack $ outputModeToExtension mode)
   noteIO $ "Welcome to text-slides. Bringing " ++ (L.intercalate ", " targets) ++ " up-to-date"

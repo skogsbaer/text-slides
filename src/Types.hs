@@ -53,7 +53,10 @@ allOutputModes :: S.Set OutputMode
 allOutputModes = S.fromList [minBound .. maxBound]
 
 data BuildArgs = BuildArgs
-  {ba_inputFile :: FilePath}
+  { ba_inputFile :: FilePath,
+    ba_verbose :: Bool,
+    ba_searchDir :: FilePath
+  }
 
 type PluginMap m = M.Map PluginName (AnyPluginConfig m)
 
@@ -74,9 +77,7 @@ data GenericBuildConfig m = BuildConfig
     bc_luaFilter :: Maybe FilePath,
     bc_syntaxTheme :: Maybe SyntaxTheme,
     bc_syntaxDefFiles :: V.Vector FilePath,
-    bc_plugins :: PluginMap m,
-    bc_verbose :: Bool,
-    bc_searchDir :: FilePath
+    bc_plugins :: PluginMap m
   }
   deriving (Show)
 

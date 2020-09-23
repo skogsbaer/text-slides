@@ -21,8 +21,10 @@ import Plugins.Code
 import Plugins.Keynote
 import Plugins.Mermaid
 import System.Directory
+import System.Exit
 import System.FilePath
 import Types
+import Utils
 
 allPlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
 allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
@@ -32,13 +34,29 @@ getHomeCfgDir = do
   home <- getHomeDirectory
   return $ home </> ".text-slides"
 
-getBuildConfig :: CmdlineOpts -> IO BuildConfig
+getBuildConfig :: CmdlineOpts -> IO (BuildConfig, BuildArgs)
 getBuildConfig opts = do
-  current <- getCurrentDirectory
-  let searchDir =
-        case co_inputFile opts of
-          Just f -> takeDirectory f
-          Nothing -> current
+  inputFile <-
+    case co_inputFile opts of
+      Just f -> return f
+      Nothing -> do
+        files <- myListDirectory "." (\f -> takeExtension f == ".md")
+        case files of
+          [f] -> return f
+          [] -> do
+            putStrLn ("No input file given and no .md file exists in current directory.")
+            exitWith (ExitFailure 1)
+          files -> do
+            putStrLn
+              ( "No input file given and multiple .md file exist in current directory: "
+                  ++ show files
+              )
+            exitWith (ExitFailure 1)
+  exists <- doesFileExist inputFile
+  when (not exists) $ do
+    putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
+    exitWith (ExitFailure 1)
+  let searchDir = takeDirectory inputFile
       searchFile = searchFile' searchDir
   beamerHeader <- searchFile "beamer-header.tex" (co_beamerHeader opts) >>= canonicalize
   infoIO ("beamerHeader: " ++ show beamerHeader)
@@ -58,27 +76,32 @@ getBuildConfig opts = do
   infoIO ("syntaxHighlighting: " ++ show syntaxTheme)
   externalCfgs <- V.toList . unExternalLangConfigs <$> getExternLangConfigs
   infoIO ("External code plugins: " ++ show externalCfgs)
-  return $
-    BuildConfig
-      { bc_buildDir = "build",
-        bc_pandoc = "pandoc",
-        bc_pdflatex = "pdflatex",
-        bc_python = "python3",
-        bc_convert = "convert",
-        bc_mermaid = "mmdc",
-        bc_beamerHeader = beamerHeader,
-        bc_htmlHeader = htmlHeader,
-        bc_luaFilter = luaFilter,
-        bc_syntaxTheme = syntaxTheme,
-        bc_plugins =
-          M.fromList $
-            map
-              (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
-              (allPlugins (map languageFromExternal externalCfgs)),
-        bc_syntaxDefFiles = V.fromList $ mapMaybe elc_syntaxFile externalCfgs,
-        bc_verbose = co_verbose opts,
-        bc_searchDir = searchDir
-      }
+  let cfg =
+        BuildConfig
+          { bc_buildDir = "build",
+            bc_pandoc = "pandoc",
+            bc_pdflatex = "pdflatex",
+            bc_python = "python3",
+            bc_convert = "convert",
+            bc_mermaid = "mmdc",
+            bc_beamerHeader = beamerHeader,
+            bc_htmlHeader = htmlHeader,
+            bc_luaFilter = luaFilter,
+            bc_syntaxTheme = syntaxTheme,
+            bc_plugins =
+              M.fromList $
+                map
+                  (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
+                  (allPlugins (map languageFromExternal externalCfgs)),
+            bc_syntaxDefFiles = V.fromList $ mapMaybe elc_syntaxFile externalCfgs
+          }
+      args =
+        BuildArgs
+          { ba_inputFile = inputFile,
+            ba_searchDir = searchDir,
+            ba_verbose = co_verbose opts
+          }
+  return (cfg, args)
   where
     canonicalize Nothing = return Nothing
     canonicalize (Just p) = do

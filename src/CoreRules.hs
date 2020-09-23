@@ -233,7 +233,7 @@ coreRules cfg args = do
         && bc_buildDir cfg `isPathPrefix` f
         && not (pluginDir' cfg `isPathPrefix` f)
     publishStaticFile out = do
-      copyFileChanged (outputFileToInputFile cfg out) out
+      copyFileChanged (outputFileToInputFile cfg args out) out
 
 mdRawExt :: String
 mdRawExt = ".mdraw"
