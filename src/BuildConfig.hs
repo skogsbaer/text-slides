@@ -11,6 +11,7 @@ import Cmdline
 import Control.Monad
 import Data.Aeson ((.:), (.:?))
 import qualified Data.Aeson as J
+import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Text as T
@@ -40,7 +41,8 @@ getBuildConfig opts = do
     case co_inputFile opts of
       Just f -> return f
       Nothing -> do
-        files <- myListDirectory "." (\f -> takeExtension f == ".md")
+        files <- myListDirectory "." $ \f ->
+          takeExtension f == ".md" && not ("." `L.isPrefixOf` (takeBaseName f))
         case files of
           [f] -> return f
           [] -> do
