@@ -25,18 +25,19 @@ testBuildConfig plugins =
     { bc_buildDir = "build",
       bc_pandoc = "pandoc",
       bc_pdflatex = "pdflatex",
+      bc_syntaxTheme = Nothing,
+      bc_syntaxDefFiles = V.empty,
       bc_python = "python3",
       bc_convert = "convert",
       bc_mermaid = "mermaid",
       bc_beamerHeader = Nothing,
       bc_htmlHeader = Nothing,
       bc_luaFilter = Nothing,
-      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins,
-      bc_verbose = False
+      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins
     }
 
 testBuildArgs :: BuildArgs
-testBuildArgs = BuildArgs {ba_inputFile = "sample.md"}
+testBuildArgs = BuildArgs {ba_inputFile = "sample.md", ba_verbose = False, ba_searchDir = "."}
 
 test_parseExternalLangConfig :: IO ()
 test_parseExternalLangConfig = do
