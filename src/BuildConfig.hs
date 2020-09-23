@@ -62,6 +62,7 @@ getBuildConfig opts = do
     BuildConfig
       { bc_buildDir = "build",
         bc_pandoc = "pandoc",
+        bc_pdflatex = "pdflatex",
         bc_python = "python3",
         bc_convert = "convert",
         bc_mermaid = "mmdc",

@@ -15,6 +15,7 @@ import System.Directory
 import System.Environment
 import System.Exit
 import System.FilePath
+import Text.Printf
 import Types
 import Utils
 
@@ -91,10 +92,11 @@ main = do
   -- Maybe this is a bug in shake. As a workaround, I include the shake version in the path
   -- to the shake database and cleanup old version here.
   cleanupShakeFiles (shakeDir cfg) shakeVersion
-  shake (mkShakeOptions cfg opts shakeVersion) $ do
-    want targets
-    coreRules cfg args
-  noteIO $ "Everything is up-to-date now."
+  (secs, _) <- withTiming $
+    shake (mkShakeOptions cfg opts shakeVersion) $ do
+      want targets
+      coreRules cfg args
+  noteIO $ printf "Everything is up-to-date now, total duration: %.3fs" secs
   where
     shakeDir cfg = bc_buildDir cfg </> ".shake"
     mkShakeOptions cfg opts v =

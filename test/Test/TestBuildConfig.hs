@@ -24,11 +24,15 @@ testBuildConfig plugins =
   BuildConfig
     { bc_buildDir = "build",
       bc_pandoc = "pandoc",
+      bc_pdflatex = "pdflatex",
       bc_python = "python3",
       bc_convert = "convert",
       bc_mermaid = "mermaid",
       bc_beamerHeader = Nothing,
-      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins
+      bc_htmlHeader = Nothing,
+      bc_luaFilter = Nothing,
+      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins,
+      bc_verbose = False
     }
 
 testBuildArgs :: BuildArgs

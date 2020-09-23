@@ -65,6 +65,7 @@ data SyntaxTheme
 data GenericBuildConfig m = BuildConfig
   { bc_buildDir :: FilePath,
     bc_pandoc :: FilePath,
+    bc_pdflatex :: FilePath,
     bc_python :: FilePath, -- python 3
     bc_convert :: FilePath, -- imagemagick
     bc_mermaid :: FilePath,
@@ -79,8 +80,11 @@ data GenericBuildConfig m = BuildConfig
   }
   deriving (Show)
 
+pluginDir' :: GenericBuildConfig m -> FilePath
+pluginDir' cfg = bc_buildDir cfg </> "plugins"
+
 pluginDir :: GenericBuildConfig m -> PluginName -> FilePath
-pluginDir cfg plugin = bc_buildDir cfg </> "plugins" </> T.unpack (unPluginName plugin)
+pluginDir cfg plugin = pluginDir' cfg </> T.unpack (unPluginName plugin)
 
 type BuildConfig = GenericBuildConfig Action
 

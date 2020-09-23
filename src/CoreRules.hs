@@ -13,15 +13,16 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import qualified Data.Aeson as J
 import qualified Data.HashMap.Strict as Hm
-import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Development.Shake
+import LatexRules
 import Logging
 import Parser
+import RuleUtils
 import System.FilePath
 import Types
 import Utils
@@ -64,8 +65,10 @@ getDependenciesFromPandocJson inFile = do
               _ -> Nothing
       | otherwise = Nothing
 
-runPandoc :: GenericBuildConfig m -> BuildArgs -> OutputMode -> FilePath -> FilePath -> Action ()
-runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .pdf -} = do
+data PandocMode = PandocModeHtml | PandocModeLatex
+
+runPandoc :: GenericBuildConfig m -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
+runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
   need [inFile]
   deps <- liftIO $ getDependenciesFromPandocJson inFile
   -- The deps are relative to the build dir
@@ -106,9 +109,8 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .pdf -} = do
             ++ optIfSet "--include-in-header=" (bc_htmlHeader cfg)
   modePandocArgs <-
     case mode of
-      OutputHtml -> htmlArgs
-      OutputPdf -> latexArgs
-      OutputLatex -> latexArgs
+      PandocModeHtml -> htmlArgs
+      PandocModeLatex -> latexArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO (bc_pandoc cfg) pandocArgs
@@ -210,17 +212,25 @@ generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
 
 coreRules :: BuildConfig -> BuildArgs -> Rules ()
 coreRules cfg args = do
-  forM_ [minBound .. maxBound :: OutputMode] $ \mode ->
-    outFile (T.unpack $ outputModeToExtension mode) %> runPandoc cfg args mode json
+  -- We do not use pandoc for generating pdf because we want to get better performance.
+  -- Pandoc just blindly reruns pdflatex 2 times, even if it's not necessary. We further
+  -- speed up compilation by caching the preamble with mylatexformat. To make this work,
+  -- the latex source code must contain \endofdump at the start of a line.
+  outFile ".html" %> runPandoc cfg args PandocModeHtml json
+  outFile ".tex" %> runPandoc cfg args PandocModeLatex json
+  latexRules cfg args
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
   sequence_ $ map (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
-  bc_buildDir cfg ++ "//*.png" %> publishStaticFile
-  bc_buildDir cfg ++ "//*.jpg" %> publishStaticFile
+  isStaticOutFile ?> publishStaticFile
   where
     outFile ext = mainOutputFile cfg args ext
     raw = outFile mdRawExt
     json = outFile ".json"
+    isStaticOutFile f =
+      takeExtension f `elem` [".jpg", ".jpeg", ".png"]
+        && bc_buildDir cfg `isPathPrefix` f
+        && not (pluginDir' cfg `isPathPrefix` f)
     publishStaticFile out = do
       copyFileChanged (outputFileToInputFile cfg out) out
 
@@ -236,10 +246,3 @@ mainOutputFile cfg args ext =
 
 mdRawOutputFile :: BuildConfig -> BuildArgs -> FilePath
 mdRawOutputFile cfg args = mainOutputFile cfg args mdRawExt
-
-outputFileToInputFile :: BuildConfig -> FilePath -> FilePath
-outputFileToInputFile cfg out =
-  let prefix = bc_buildDir cfg ++ "/"
-   in if not (prefix `L.isPrefixOf` out)
-        then error ("outputFileToInputFile: not an output file: " ++ out)
-        else bc_searchDir cfg </> drop (length prefix) out
