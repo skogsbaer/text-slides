@@ -2,6 +2,7 @@ module LatexRules (latexRules) where
 
 import qualified Data.List as L
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Development.Shake
 import Logging
 import System.FilePath
@@ -17,20 +18,50 @@ texPreambleExt = ".texpreamble"
 preambleCacheExt :: String
 preambleCacheExt = ".fmt"
 
+rerunPhrases :: [T.Text]
+rerunPhrases =
+  [ "Table widths have changed. Rerun LaTeX.",
+    "Rerun to get outlines right",
+    "Rerun to get cross-references right"
+  ]
+
+findPhrase :: T.Text -> [T.Text] -> Maybe T.Text
+findPhrase _ [] = Nothing
+findPhrase t (x : xs) =
+  if x `T.isInfixOf` t then Just x else findPhrase t xs
+
 genPdf :: BuildConfig -> FilePath -> Action ()
 genPdf cfg pdf = do
-  let input = pdf -<.> texBodyExt
-  need [input, pdf -<.> preambleCacheExt]
-  mySystem
-    INFO
-    (bc_pdflatex cfg)
-    [ "-halt-on-error",
-      "-interaction",
-      "nonstopmode",
-      "-output-directory",
-      bc_buildDir cfg,
-      input
-    ]
+  need [pdf -<.> texBodyExt, pdf -<.> preambleCacheExt]
+  runPdfLatex 0
+  where
+    runPdfLatex runNo = do
+      mySystem
+        INFO
+        (bc_pdflatex cfg)
+        [ "-halt-on-error",
+          "-interaction",
+          "nonstopmode",
+          "-output-directory",
+          bc_buildDir cfg,
+          pdf -<.> texBodyExt
+        ]
+      -- check if we must re-run latex
+      let logFile = pdf -<.> ".log"
+      log <- liftIO $ T.readFile logFile -- do not depend on the log file
+      let mRerunPhrase = findPhrase log rerunPhrases
+      case mRerunPhrase of
+        Nothing -> return ()
+        Just phrase -> do
+          if runNo > 3
+            then
+              warn $
+                "Not re-running latex, already did " ++ show (runNo + 1) ++ " runs but "
+                  ++ "still found the following in the log: "
+                  ++ T.unpack phrase
+            else do
+              note $ "Re-running latex, reason: " ++ T.unpack phrase
+              runPdfLatex (runNo + 1)
 
 -- FIXME: rerun if necessary
 
