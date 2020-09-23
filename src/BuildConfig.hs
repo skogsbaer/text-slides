@@ -27,33 +27,6 @@ import Types
 allPlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
 allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
 
-defaultBuildConfig ::
-  [(T.Text, LangConfig)] ->
-  [FilePath] ->
-  Maybe FilePath ->
-  Maybe FilePath ->
-  Maybe FilePath ->
-  Maybe SyntaxTheme ->
-  BuildConfig
-defaultBuildConfig moreLanguages syntaxDefFiles beamerHeader htmlHeader luaFilter syntaxTheme =
-  BuildConfig
-    { bc_buildDir = "build",
-      bc_pandoc = "pandoc",
-      bc_python = "python3",
-      bc_convert = "convert",
-      bc_mermaid = "mmdc",
-      bc_beamerHeader = beamerHeader,
-      bc_htmlHeader = htmlHeader,
-      bc_luaFilter = luaFilter,
-      bc_syntaxTheme = syntaxTheme,
-      bc_plugins =
-        M.fromList $
-          map
-            (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
-            (allPlugins moreLanguages),
-      bc_syntaxDefFiles = V.fromList syntaxDefFiles
-    }
-
 getHomeCfgDir :: IO FilePath
 getHomeCfgDir = do
   home <- getHomeDirectory
@@ -61,6 +34,12 @@ getHomeCfgDir = do
 
 getBuildConfig :: CmdlineOpts -> IO BuildConfig
 getBuildConfig opts = do
+  current <- getCurrentDirectory
+  let searchDir =
+        case co_inputFile opts of
+          Just f -> takeDirectory f
+          Nothing -> current
+      searchFile = searchFile' searchDir
   beamerHeader <- searchFile "beamer-header.tex" (co_beamerHeader opts) >>= canonicalize
   infoIO ("beamerHeader: " ++ show beamerHeader)
   htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
@@ -80,29 +59,35 @@ getBuildConfig opts = do
   externalCfgs <- V.toList . unExternalLangConfigs <$> getExternLangConfigs
   infoIO ("External code plugins: " ++ show externalCfgs)
   return $
-    defaultBuildConfig
-      (map languageFromExternal externalCfgs)
-      (mapMaybe elc_syntaxFile externalCfgs)
-      beamerHeader
-      htmlHeader
-      luaFilter
-      syntaxTheme
+    BuildConfig
+      { bc_buildDir = "build",
+        bc_pandoc = "pandoc",
+        bc_python = "python3",
+        bc_convert = "convert",
+        bc_mermaid = "mmdc",
+        bc_beamerHeader = beamerHeader,
+        bc_htmlHeader = htmlHeader,
+        bc_luaFilter = luaFilter,
+        bc_syntaxTheme = syntaxTheme,
+        bc_plugins =
+          M.fromList $
+            map
+              (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
+              (allPlugins (map languageFromExternal externalCfgs)),
+        bc_syntaxDefFiles = V.fromList $ mapMaybe elc_syntaxFile externalCfgs,
+        bc_verbose = co_verbose opts,
+        bc_searchDir = searchDir
+      }
   where
     canonicalize Nothing = return Nothing
     canonicalize (Just p) = do
       cp <- canonicalizePath p
       return (Just cp)
-    searchFile :: FilePath -> Maybe FilePath -> IO (Maybe FilePath)
-    searchFile _ (Just fromCmdLine) = return $ Just fromCmdLine
-    searchFile path Nothing = do
-      current <- getCurrentDirectory
+    searchFile' :: FilePath -> FilePath -> Maybe FilePath -> IO (Maybe FilePath)
+    searchFile' _ _ (Just fromCmdLine) = return $ Just fromCmdLine
+    searchFile' searchDir path Nothing = do
       homeCfgDir <- getHomeCfgDir
-      let candidates =
-            ( case co_inputFile opts of
-                Just f -> [takeDirectory f </> path]
-                Nothing -> [current </> path]
-            )
-              ++ [homeCfgDir </> path]
+      let candidates = [searchDir </> path, homeCfgDir </> path]
       results <- forM candidates $ \cand -> do
         b <- doesFileExist cand
         return $ if b then Just cand else Nothing

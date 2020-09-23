@@ -29,22 +29,25 @@ data OutputMode
   | OutputLatex
   deriving (Eq, Ord, Show, Enum, Bounded)
 
-outputModeStringMapping :: [(OutputMode, T.Text)]
+outputModeStringMapping :: [(OutputMode, T.Text, T.Text)]
 outputModeStringMapping =
-  [ (OutputHtml, "html"),
-    (OutputPdf, "pdf"),
-    (OutputLatex, "latex")
+  [ (OutputHtml, "html", ".html"),
+    (OutputPdf, "pdf", ".pdf"),
+    (OutputLatex, "latex", ".text")
   ]
 
 readOutputMode :: T.Text -> Maybe OutputMode
-readOutputMode s = L.lookup s (map (\(x, y) -> (y, x)) outputModeStringMapping)
+readOutputMode s = L.lookup s (map (\(x, y, _) -> (y, x)) outputModeStringMapping)
 
 showOutputMode :: OutputMode -> T.Text
 showOutputMode m =
-  fromJustNote ("unknown output mode: " ++ show m) $ L.lookup m outputModeStringMapping
+  fromJustNote ("unknown output mode: " ++ show m) $
+    L.lookup m $ map (\(x, y, _) -> (x, y)) outputModeStringMapping
 
 outputModeToExtension :: OutputMode -> T.Text
-outputModeToExtension mode = "." <> showOutputMode mode
+outputModeToExtension m =
+  fromJustNote ("unknown output mode: " ++ show m) $
+    L.lookup m $ map (\(x, y, _) -> (x, y)) outputModeStringMapping
 
 allOutputModes :: S.Set OutputMode
 allOutputModes = S.fromList [minBound .. maxBound]
@@ -70,7 +73,9 @@ data GenericBuildConfig m = BuildConfig
     bc_luaFilter :: Maybe FilePath,
     bc_syntaxTheme :: Maybe SyntaxTheme,
     bc_syntaxDefFiles :: V.Vector FilePath,
-    bc_plugins :: PluginMap m
+    bc_plugins :: PluginMap m,
+    bc_verbose :: Bool,
+    bc_searchDir :: FilePath
   }
   deriving (Show)
 

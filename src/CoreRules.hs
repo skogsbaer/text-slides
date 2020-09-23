@@ -13,6 +13,7 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import qualified Data.Aeson as J
 import qualified Data.HashMap.Strict as Hm
+import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
@@ -214,15 +215,14 @@ coreRules cfg args = do
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
   sequence_ $ map (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
-  bc_buildDir cfg </> "*.png" %> publishStaticFile
-  bc_buildDir cfg </> "*.jpg" %> publishStaticFile
+  bc_buildDir cfg ++ "//*.png" %> publishStaticFile
+  bc_buildDir cfg ++ "//*.jpg" %> publishStaticFile
   where
     outFile ext = mainOutputFile cfg args ext
     raw = outFile mdRawExt
     json = outFile ".json"
     publishStaticFile out = do
-      let f = takeDirectory (ba_inputFile args) </> takeFileName out
-      copyFileChanged f out
+      copyFileChanged (outputFileToInputFile cfg out) out
 
 mdRawExt :: String
 mdRawExt = ".mdraw"
@@ -236,3 +236,10 @@ mainOutputFile cfg args ext =
 
 mdRawOutputFile :: BuildConfig -> BuildArgs -> FilePath
 mdRawOutputFile cfg args = mainOutputFile cfg args mdRawExt
+
+outputFileToInputFile :: BuildConfig -> FilePath -> FilePath
+outputFileToInputFile cfg out =
+  let prefix = bc_buildDir cfg ++ "/"
+   in if not (prefix `L.isPrefixOf` out)
+        then error ("outputFileToInputFile: not an output file: " ++ out)
+        else bc_searchDir cfg </> drop (length prefix) out
