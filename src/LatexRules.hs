@@ -87,7 +87,7 @@ splitPreamble outFile src =
     (_, []) -> Nothing
     (prefix, endLine : body) ->
       let preamble = T.unlines prefix <> endLine
-          fullBody = "%&" <> jobname <> "\n" <> T.unlines body
+          fullBody = "%&" <> jobname <> "\n\\endofdump\n" <> T.unlines body
        in Just (preamble, fullBody)
   where
     jobname = T.pack $ dropExtension outFile
