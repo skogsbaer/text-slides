@@ -18,10 +18,12 @@ module Plugins.Mermaid
   )
 where
 
+import Control.Monad
 import Control.Monad.Trans.Except
 import CoreRules
 import qualified Data.Aeson as J
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Development.Shake
@@ -63,9 +65,9 @@ mermaidPlugin =
       }
 
 runMermaid :: BuildConfig -> BuildArgs -> FilePath -> Action ()
-runMermaid cfg _buildArgs outFile = do
-  let jsonFile = replaceExtension outFile ".json"
-      mddFile = replaceExtension outFile ".mdd"
+runMermaid cfg _buildArgs pngFile = do
+  let jsonFile = replaceExtension pngFile ".json"
+      mddFile = replaceExtension pngFile ".mdd"
   need [jsonFile, mddFile]
   json <- liftIO $ BSL.readFile jsonFile
   case J.decode' json of
@@ -77,14 +79,16 @@ runMermaid cfg _buildArgs outFile = do
     Just mermaidCall -> do
       note
         ( "Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall) ++ " to produce "
-            ++ outFile
+            ++ pngFile
         )
-      let args = map T.unpack (mc_args mermaidCall) ++ ["--input", mddFile, "--output", outFile]
-      mySystem INFO (bc_mermaid cfg) args Nothing
+      let mermaidArgs =
+            map T.unpack (mc_args mermaidCall)
+              ++ ["--input", mddFile, "--output", pngFile, "--scale", "8"]
+      mySystem INFO (bc_mermaid cfg) mermaidArgs Nothing
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do
-  (pluginDir cfg mermaidPluginName) ++ "/*.svg" %> runMermaid cfg args
+  (pluginDir cfg mermaidPluginName) ++ "/*.png" %> runMermaid cfg args
   (pluginDir cfg mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile cfg args]
   (pluginDir cfg mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile cfg args]
 
@@ -98,8 +102,8 @@ instance J.FromJSON MermaidCall
 
 instance J.ToJSON MermaidCall
 
-runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
-runPlugin cfg _buildArgs () call = do
+mermaidCallAndHash :: Monad m => PluginCall -> ExceptT T.Text m (MermaidCall, Hash)
+mermaidCallAndHash call = do
   args <- exceptInM $ parseArgs call
   let mermaidCall =
         MermaidCall
@@ -107,10 +111,18 @@ runPlugin cfg _buildArgs () call = do
             mc_where = unLocation (pc_location call)
           }
       hash = md5OfText (showText mermaidCall <> pc_body call)
-      outDir = pluginDir cfg mermaidPluginName
+  return (mermaidCall, hash)
+  where
+    toArg _ Nothing = []
+    toArg opt (Just i) = [opt, showText i]
+
+runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
+runPlugin cfg _buildArgs () call = do
+  (mermaidCall, hash) <- mermaidCallAndHash call
+  let outDir = pluginDir cfg mermaidPluginName
       outFile ext =
         pluginDir cfg mermaidPluginName </> T.unpack (unHash hash) <.> ext
-      diagFile = outFile ".svg"
+      diagFile = outFile ".png"
       -- all output files are place directly in the build directory
       relDiagFile = makeRelative (bc_buildDir cfg) diagFile
   liftIO $ createDirectoryIfMissing True outDir
@@ -118,10 +130,17 @@ runPlugin cfg _buildArgs () call = do
   liftIO $ T.writeFile (outFile ".mdd") (pc_body call)
   let res = "![](" <> T.pack relDiagFile <> ")"
   return (res, ())
-  where
-    toArg _ Nothing = []
-    toArg opt (Just i) = [opt, showText i]
 
 processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
-processAllCalls _cfg _buildArgs _calls = return () -- FIXME: cleanup
+processAllCalls cfg _buildArgs calls = do
+  -- remove unreference files
+  allHashes <- forM calls $ \call -> mermaidCallAndHash call >>= (return . snd)
+  let setOfHashes = S.fromList (map unHash allHashes)
+  files <-
+    liftIO $
+      myListDirectory (pluginDir cfg mermaidPluginName) $ \f ->
+        takeExtension f `elem` [".png", ".json", ".mdd"]
+  forM_ files $ \file -> do
+    let hash = T.pack $ takeBaseName file
+    unless (hash `S.member` setOfHashes) (liftIO $ removeFile file)
