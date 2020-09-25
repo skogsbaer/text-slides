@@ -128,6 +128,9 @@ genPdf cfg pdf = do
   checkForOverfullSlides pdf
   where
     runPdfLatex env runNo = do
+      let logFile = pdf -<.> ".log"
+          navFile = pdf -<.> ".nav"
+      navBefore <- liftIO $ BS.readFile navFile
       mySystem
         INFO
         (bc_pdflatex cfg)
@@ -139,22 +142,36 @@ genPdf cfg pdf = do
           pdf -<.> texBodyExt
         ]
         (Just env)
+      navAfter <- liftIO $ BS.readFile navFile
       -- check if we must re-run latex
-      let logFile = pdf -<.> ".log"
       log <- liftIO $ readFileWithUnknownEncoding logFile -- do not depend on the log file
       let mRerunPhrase = findPhrase log rerunPhrases
-      case mRerunPhrase of
-        Nothing -> return ()
-        Just phrase -> do
-          if runNo > 3
-            then
-              warn $
-                "Not re-running latex, already did " ++ show (runNo + 1) ++ " runs but "
-                  ++ "still found the following in the log: "
-                  ++ T.unpack phrase
-            else do
-              note $ "Re-running latex, reason: " ++ T.unpack phrase
-              runPdfLatex env (runNo + 1)
+      needRerun <-
+        case (mRerunPhrase, navAfter == navBefore) of
+          (Nothing, True) -> return False
+          (Just phrase, _) -> do
+            if runNo > maxReruns
+              then do
+                warn $
+                  "Not re-running latex, already did " ++ show (runNo + 1) ++ " runs but "
+                    ++ "still found the following in the log: "
+                    ++ T.unpack phrase
+                return False
+              else do
+                note $ "Re-running latex, reason: " ++ T.unpack phrase
+                return True
+          (Nothing, False) -> do
+            if runNo > maxReruns
+              then do
+                warn $
+                  "Not re-running latex, already did " ++ show (runNo + 1) ++ " runs but "
+                    ++ " frame numbers are still wrong"
+                return False
+              else do
+                note $ "Re-running latex because frame numbers changed"
+                return True
+      when needRerun $ runPdfLatex env (runNo + 1)
+    maxReruns = 3
 
 splitPreamble :: FilePath -> T.Text -> Maybe (T.Text, T.Text)
 splitPreamble outFile src =
