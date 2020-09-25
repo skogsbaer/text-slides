@@ -1,0 +1,22 @@
+- include plugin
+- Replace the options --beamer-header, --html-header,
+  --lua-filter, --syntax-theme and the new option for
+  turning off auto shrink with a config file. The config
+  file is a json file that allows setting all options.
+  The config file is searched like this:
+  * Name given on cmdline
+  * File text-slides.cfg next to input file
+  * File text-slides.cfg in ~/.text-slides
+
+  File names in the config file are resolved relatively to
+  this config file.
+
+  Configuration options are resolved like this:
+
+  1. Config file whose name was given on the cmdline. If
+     no such config file was given, file text-slides.cfg
+     in the dir next to the input-file
+  2. ~/.text-slides/text-slides.cfg
+  3. Default filename in ~/.text-slides (if applicable)
+  4. The global default
+

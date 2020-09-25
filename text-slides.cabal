@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a352aaa1c82c4c2d8b6cfb55d4ef0873405d42870e5bf66594a9f7cbdb37c010
+-- hash: 682b28ba8b3d55c2b53a8fc95da3fa3359915218776d0b8fc4c6104c5c842135
 
 name:           text-slides
 version:        0.1
@@ -30,6 +30,7 @@ source-repository head
 
 library
   exposed-modules:
+      Ansi
       BuildConfig
       Cmdline
       CoreRules

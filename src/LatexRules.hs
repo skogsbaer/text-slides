@@ -1,11 +1,16 @@
 module LatexRules (latexRules) where
 
+import Control.Monad
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
+import Data.Maybe
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as T
 import Development.Shake
 import Logging
+import Safe
 import System.Environment
 import System.FilePath
 import Types
@@ -44,12 +49,83 @@ mkLatexEnv cfg = do
   where
     texInputsKey = "TEXINPUTS"
 
+data Frame = Frame
+  { f_title :: T.Text,
+    f_slideNo :: Int,
+    f_lineStart :: Int,
+    f_lineEnd :: Int
+  }
+
+parseFrameFromTex :: T.Text -> [Frame]
+parseFrameFromTex text =
+  let frames = reverse $ loop [] Nothing (zip (T.lines text) [1 ..])
+   in map (\(f, slideNo) -> f {f_slideNo = slideNo}) (zip frames [2 ..])
+  where
+    loop acc _ [] = acc
+    loop acc ctx ((line, no) : rest)
+      | "\\begin{frame}" `T.isPrefixOf` line =
+        loop acc (Just (Frame (extractTitle line) 0 no no)) rest
+      | "\\end{frame}" `T.isPrefixOf` line,
+        Just f <- ctx =
+        loop (f {f_lineEnd = no} : acc) Nothing rest
+      | otherwise = loop acc ctx rest
+    extractTitle t =
+      let t1 = T.drop (T.length "\\begin{frame}{") t
+          t2 = if "fragile" `T.isPrefixOf` t1 then T.drop (T.length "fragile]{") t1 else t1
+       in T.dropEnd 1 t2
+
+findFrame :: [Frame] -> Int -> Maybe Frame
+findFrame [] _ = Nothing
+findFrame (f : fs) lineNo =
+  if lineNo >= f_lineStart f && lineNo <= f_lineEnd f
+    then Just f
+    else findFrame fs lineNo
+
+checkForOverfullSlides :: FilePath -> Action ()
+checkForOverfullSlides pdf = do
+  logLines <- (map T.stripEnd . T.lines) <$> liftIO (readFileWithUnknownEncoding log)
+  let overfullVBoxes = mapMaybe findOverfullVBox logLines
+  texSrc <- liftIO $ readFileWithUnknownEncoding tex
+  let frames = parseFrameFromTex texSrc
+  forM_ overfullVBoxes (warnOverfullVBox frames)
+  return ()
+  where
+    log = pdf -<.> ".log"
+    tex = pdf -<.> ".texbody"
+    warnOverfullVBox :: [Frame] -> (T.Text, Int) -> Action ()
+    warnOverfullVBox frames (errMsg, lineInTex) = do
+      let raw = log ++ ": " ++ T.unpack errMsg
+      case findFrame frames lineInTex of
+        Nothing -> warn raw
+        Just frame ->
+          warn
+            ( "Slide " ++ show (f_slideNo frame) ++ " " ++ show (f_title frame)
+                ++ " is too high. ("
+                ++ raw
+                ++ ")"
+            )
+    findOverfullVBox :: T.Text -> Maybe (T.Text, Int)
+    findOverfullVBox line =
+      if "Overfull \\vbox" `T.isPrefixOf` line
+        then case readMay (T.unpack $ L.last (T.words line)) of
+          Just texLineNo -> Just (line, texLineNo)
+          Nothing -> Nothing
+        else Nothing
+
+readFileWithUnknownEncoding :: FilePath -> IO T.Text
+readFileWithUnknownEncoding fp = do
+  bs <- BS.readFile fp -- no dependency
+  case T.decodeUtf8' bs of
+    Left _exc -> return $ T.pack $ BSC.unpack bs -- assume it's iso-8859-1
+    Right t -> return t
+
 genPdf :: BuildConfig -> FilePath -> Action ()
 genPdf cfg pdf = do
   need [pdf -<.> texBodyExt, pdf -<.> preambleCacheExt]
   env <- liftIO $ mkLatexEnv cfg
   note ("Generating " ++ pdf)
   runPdfLatex env 0
+  checkForOverfullSlides pdf
   where
     runPdfLatex env runNo = do
       mySystem
@@ -65,7 +141,7 @@ genPdf cfg pdf = do
         (Just env)
       -- check if we must re-run latex
       let logFile = pdf -<.> ".log"
-      log <- liftIO $ T.readFile logFile -- do not depend on the log file
+      log <- liftIO $ readFileWithUnknownEncoding logFile -- do not depend on the log file
       let mRerunPhrase = findPhrase log rerunPhrases
       case mRerunPhrase of
         Nothing -> return ()

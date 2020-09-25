@@ -22,6 +22,7 @@ module Logging
   )
 where
 
+import Ansi
 import Control.Concurrent.MVar
 import Control.Monad
 import Development.Shake
@@ -70,7 +71,23 @@ isTrace =
 doLog :: LogLevel -> String -> IO ()
 doLog ll msg =
   withMVar logLevelMVar $ \curLevel ->
-    when (ll >= curLevel) (hPutStrLn stderr (levelPrefix ll ++ msg) >> hFlush stderr)
+    when (ll >= curLevel) (hPutStrLn stderr formatted >> hFlush stderr)
+  where
+    formatted =
+      let x = levelPrefix ll ++ msg
+       in case levelColor ll of
+            Just c -> colorize c x
+            Nothing -> x
+
+levelColor :: LogLevel -> Maybe Ansi
+levelColor ll =
+  case ll of
+    TRACE -> Just _DARK_GRAY_
+    DEBUG -> Just _DARK_GRAY_
+    INFO -> Nothing
+    NOTE -> Nothing
+    WARN -> Just _PURPLE_
+    ERROR -> Just _LIGHT_RED_
 
 levelPrefix :: LogLevel -> String
 levelPrefix ll =
@@ -78,7 +95,9 @@ levelPrefix ll =
     TRACE -> "[TRACE] "
     DEBUG -> "[DEBUG] "
     INFO -> "[INFO] "
-    _ -> ""
+    NOTE -> ""
+    WARN -> "WARN: "
+    ERROR -> "ERROR: "
 
 trace :: String -> Action ()
 trace = liftIO . traceIO
