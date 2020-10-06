@@ -39,7 +39,8 @@ data KeynoteArgs = KeynoteArgs
   { ka_file :: FilePath,
     ka_slide :: Int,
     ka_width :: Maybe T.Text,
-    ka_height :: Maybe T.Text
+    ka_height :: Maybe T.Text,
+    ka_center :: Bool
   }
 
 parseArgs :: PluginCall -> Fail KeynoteArgs
@@ -48,7 +49,8 @@ parseArgs call = do
   ka_slide <- getRequiredIntValue loc "slide" argMap
   ka_width <- getOptionalValue loc "width" argMap "Int or String" intOrStringAsString
   ka_height <- getOptionalValue loc "height" argMap "Int or String" intOrStringAsString
-  checkForSpuriousArgs loc argMap ["file", "slide", "width", "height"]
+  ka_center <- fromMaybe False <$> getOptionalBoolValue loc "center" argMap
+  checkForSpuriousArgs loc argMap ["file", "slide", "width", "height", "center"]
   return KeynoteArgs {..}
   where
     loc = pc_location call
@@ -164,7 +166,11 @@ runPlugin cfg _buildArgs () call = do
           ] of
           [] -> ""
           l -> "{" <> T.intercalate " " l <> "}"
-      res = "![](" <> T.pack imgFile <> ")" <> dimensions
+      prefix =
+        case ka_center args of
+          True -> "![center]"
+          False -> "![]"
+      res = prefix <> "(" <> T.pack imgFile <> ")" <> dimensions
   return (res, ())
 
 processAllCalls ::
