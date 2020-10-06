@@ -135,6 +135,9 @@ Supported arguments:
 
 * `file` (required string): path to the keynote presentation.
 * `slide` (required int): number of the slide (numbering starts at 1).
+* `width` (optional int or string): width of the image (either in pixel or percentage)
+* `height` (optional int or string): height of the image (either in pixel or percentage)
+* `center` (optional bool): whether to center the image
 
 Example:
 
@@ -241,7 +244,7 @@ The syntax file is a
 ### Syntax highlighting themes
 
 Pandoc comes with a couple of builtin themes for syntax highlighting. The default used by
-text-slides is the `haddock` theme. Here's how to use a different theme:
+text-slides is the `pygments` theme. Here's how to use a different theme:
 
 * Use the commandline option `--syntax-theme=NAME_OF_THEME|FILE`.
 * Place the definition of your theme in `syntax-highlighting.theme`,
