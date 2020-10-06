@@ -89,7 +89,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
         syntaxDefs
           ++ [ "--from=json",
                "--slide-level=2",
-               "--highlight-style=" ++ fromMaybe "haddock" hightlightTheme,
+               "--highlight-style=" ++ fromMaybe "pygments" hightlightTheme,
                "--output=" ++ outFile
              ]
           ++ optIfSet "--lua-filter=" (bc_luaFilter cfg)
