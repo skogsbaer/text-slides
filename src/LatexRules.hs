@@ -11,6 +11,7 @@ import qualified Data.Text.Encoding as T
 import Development.Shake
 import Logging
 import Safe
+import qualified System.Directory as Dir
 import System.Environment
 import System.FilePath
 import Types
@@ -130,7 +131,8 @@ genPdf cfg pdf = do
     runPdfLatex env runNo = do
       let logFile = pdf -<.> ".log"
           navFile = pdf -<.> ".nav"
-      navBefore <- liftIO $ BS.readFile navFile
+      navExists <- liftIO $ Dir.doesFileExist navFile
+      navBefore <- if navExists then liftIO $ BS.readFile navFile else return BS.empty
       mySystem
         INFO
         (bc_pdflatex cfg)
