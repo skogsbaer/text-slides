@@ -43,7 +43,8 @@ data CodeArgs = CodeArgs
     ca_mode :: CodeMode,
     ca_lineNumberMode :: LineNumberMode,
     ca_firstLine :: FirstLine,
-    ca_place :: CodePlace
+    ca_place :: CodePlace,
+    ca_comment :: Bool
   }
 
 parseArgs :: PluginCall -> Fail CodeArgs
@@ -52,6 +53,7 @@ parseArgs call = do
   modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
   lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
   placeStr <- getOptionalEnumValue loc "place" ["atStart", "here", "atEnd"] m
+  comment <- fromMaybe False <$> getOptionalBoolValue loc "comment" m
   mode <-
     case modeStr of
       Just "show" -> return CodeModeShow
@@ -79,14 +81,15 @@ parseArgs call = do
       ArgString "continue" -> Just $ FirstLineContinue
       _ -> Nothing
   let firstLine = fromMaybe FirstLineImplicit firstLineM
-  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine", "place"]
+  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine", "place", "comment"]
   return $
     CodeArgs
       { ca_file = fmap T.unpack file,
         ca_mode = mode,
         ca_lineNumberMode = lineNum,
         ca_firstLine = firstLine,
-        ca_place = place
+        ca_place = place,
+        ca_comment = comment
       }
   where
     loc = pc_location call
@@ -105,7 +108,7 @@ mkCodePlugin name cfg =
       p_kind = PluginWithBody,
       p_rules = pluginRules,
       p_init = return initialCodeState,
-      p_expand = runPlugin,
+      p_expand = runPlugin cfg,
       p_forAllCalls = processAllCalls cfg
     }
 
@@ -113,8 +116,13 @@ pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules _cfg _args = return ()
 
 runPlugin ::
-  BuildConfig -> BuildArgs -> CodeState -> PluginCall -> ExceptT T.Text Action (T.Text, CodeState)
-runPlugin _cfg _buildArgs state call = do
+  LangConfig ->
+  BuildConfig ->
+  BuildArgs ->
+  CodeState ->
+  PluginCall ->
+  ExceptT T.Text Action (T.Text, CodeState)
+runPlugin _langCfg _cfg _buildArgs state call = do
   args <- exceptInM $ parseArgs call
   let showLineNumbers =
         case ca_lineNumberMode args of
@@ -236,13 +244,18 @@ processAllCalls langCfg cfg buildArgs calls = do
               Nothing -> replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
               Just f -> f
           file = pluginDir cfg (pc_pluginName call) </> baseFile
-          body = T.stripEnd (pc_body call)
+          body = comment (ca_comment args) $ T.stripEnd (pc_body call)
           code = "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
       let mCode =
             case ca_mode args of
               CodeModeShowOnly -> Nothing
               _ -> Just (ca_place args, code)
       return (file, mCode)
+    comment False t = t
+    comment True t =
+      T.unlines $
+        map (lineComment langCfg) $
+          T.lines t
 
 data LangConfig = LangConfig
   { lc_fileExt :: String,
