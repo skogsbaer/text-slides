@@ -113,6 +113,8 @@ The default is "here", which respects to ordering of the code snippets in the ma
 "atEnd" place the code snippet at the of the code file, if several snippets are marked with
 "atEnd", then their ordering in the markdown file is preservered. Similarly, "atStart" places
 the code snippet at the beginning of the code file.
+* `comment` (optional bool): if `true` (the default being `false`), the code is exported
+as a comment to the file.
 
 #### Example
 
