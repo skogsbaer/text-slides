@@ -40,7 +40,8 @@ data KeynoteArgs = KeynoteArgs
     ka_slide :: Int,
     ka_width :: Maybe T.Text,
     ka_height :: Maybe T.Text,
-    ka_center :: Bool
+    ka_center :: Bool,
+    ka_trim :: Bool
   }
 
 parseArgs :: PluginCall -> Fail KeynoteArgs
@@ -50,7 +51,8 @@ parseArgs call = do
   ka_width <- getOptionalValue loc "width" argMap "Int or String" intOrStringAsString
   ka_height <- getOptionalValue loc "height" argMap "Int or String" intOrStringAsString
   ka_center <- fromMaybe False <$> getOptionalBoolValue loc "center" argMap
-  checkForSpuriousArgs loc argMap ["file", "slide", "width", "height", "center"]
+  ka_trim <- fromMaybe True <$> getOptionalBoolValue loc "trim" argMap
+  checkForSpuriousArgs loc argMap ["file", "slide", "width", "height", "center", "trim"]
   return KeynoteArgs {..}
   where
     loc = pc_location call
@@ -131,13 +133,14 @@ runKeynoteExport cfg hashFile = do
   let exportArgs = [script, "-k", keyFile, "-o", outDir]
   mySystem INFO (bc_python cfg) exportArgs Nothing
   jpegs <- liftIO $ myListDirectory (outDir </> "slides") isJpegFile
-  forM_ jpegs $ \jpeg ->
+  forM_ jpegs $ \jpeg -> do
     let (d, f) = splitFileName jpeg
-     in mySystem
-          INFO
-          (bc_convert cfg)
-          [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
-          Nothing
+    liftIO $ copyFile jpeg (d </> fixImageFileName f)
+    mySystem
+      INFO
+      (bc_convert cfg)
+      [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
+      Nothing
   myWriteFile hashFile (unHash hash)
   where
     fixImageFileName f =
@@ -158,7 +161,11 @@ runPlugin cfg _buildArgs () call = do
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
   -- all output files are place directly in the build directory
   let relDir = makeRelative (bc_buildDir cfg) dir
-      imgFile = relDir </> "slides" </> printf "trimmed_slides_%03d.jpg" (ka_slide args)
+      fileName =
+        if ka_trim args
+          then printf "trimmed_slides_%03d.jpg" (ka_slide args)
+          else printf "slides_%03d.jpg" (ka_slide args)
+      imgFile = relDir </> "slides" </> fileName
       dimensions =
         case catMaybes
           [ fmap (\w -> "width=" <> w) (ka_width args),
