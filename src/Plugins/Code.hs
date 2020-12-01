@@ -44,7 +44,8 @@ data CodeArgs = CodeArgs
     ca_lineNumberMode :: LineNumberMode,
     ca_firstLine :: FirstLine,
     ca_place :: CodePlace,
-    ca_comment :: Bool
+    ca_comment :: Bool,
+    ca_prepend :: Maybe T.Text
   }
 
 parseArgs :: PluginCall -> Fail CodeArgs
@@ -54,6 +55,7 @@ parseArgs call = do
   lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
   placeStr <- getOptionalEnumValue loc "place" ["atStart", "here", "atEnd"] m
   comment <- fromMaybe False <$> getOptionalBoolValue loc "comment" m
+  prepend <- getOptionalStringValue loc "prepend" m
   mode <-
     case modeStr of
       Just "show" -> return CodeModeShow
@@ -81,7 +83,8 @@ parseArgs call = do
       ArgString "continue" -> Just $ FirstLineContinue
       _ -> Nothing
   let firstLine = fromMaybe FirstLineImplicit firstLineM
-  checkForSpuriousArgs loc m ["file", "mode", "lineNumbers", "firstLine", "place", "comment"]
+  checkForSpuriousArgs loc m
+      ["file", "mode", "lineNumbers", "firstLine", "place", "comment", "prepend"]
   return $
     CodeArgs
       { ca_file = fmap T.unpack file,
@@ -89,7 +92,8 @@ parseArgs call = do
         ca_lineNumberMode = lineNum,
         ca_firstLine = firstLine,
         ca_place = place,
-        ca_comment = comment
+        ca_comment = comment,
+        ca_prepend = prepend
       }
   where
     loc = pc_location call
@@ -244,7 +248,9 @@ processAllCalls langCfg cfg buildArgs calls = do
               Nothing -> replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
               Just f -> f
           file = pluginDir cfg (pc_pluginName call) </> baseFile
-          body = comment (ca_comment args) $ T.stripEnd (pc_body call)
+          body =
+            maybe "" (\t -> t <> "\n") (ca_prepend args) <>
+            (comment (ca_comment args) $ T.stripEnd (pc_body call))
           code = "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
       let mCode =
             case ca_mode args of
