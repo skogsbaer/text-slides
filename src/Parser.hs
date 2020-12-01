@@ -188,5 +188,16 @@ parseSectionName t =
       let title = T.drop 2 t
        in if "#" `T.isPrefixOf` title
             then Nothing
-            else Just $ T.strip $ T.dropWhileEnd (\c -> c == '#') $ T.stripEnd title
+            else
+              Just $
+                T.strip $
+                  removeShrink $
+                    T.dropWhileEnd (\c -> c == '#') $ removeShrink title
     else Nothing
+  where
+    removeShrink :: T.Text -> T.Text
+    removeShrink t =
+      let t1 = T.stripEnd t
+       in case T.stripSuffix "{.shrink}" t1 of
+            Just x -> T.stripEnd x
+            Nothing -> t1
