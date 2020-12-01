@@ -8,6 +8,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import Data.Foldable (forM_)
 import Development.Shake
 import Safe
 import System.FilePath
@@ -133,7 +134,7 @@ getOptionalValue :: Location -> T.Text -> ArgMap -> T.Text -> (ArgValue -> Maybe
 getOptionalValue l k m ty fun =
   case M.lookup k m of
     Nothing -> Right Nothing
-    Just v -> fmap Just $ castArgValue l k v ty fun
+    Just v -> Just <$> castArgValue l k v ty fun
 
 getRequiredStringValue :: Location -> T.Text -> ArgMap -> Fail T.Text
 getRequiredStringValue l k m =
@@ -161,9 +162,7 @@ getRequiredEnumValue l k values m = do
 getOptionalEnumValue :: Location -> T.Text -> [T.Text] -> ArgMap -> Fail (Maybe T.Text)
 getOptionalEnumValue l k values m = do
   mv <- getOptionalValue l k m "String" asString
-  case mv of
-    Nothing -> return ()
-    Just v -> checkEnum l k values v
+  forM_ mv $ \v -> checkEnum l k values v
   return mv
 
 getRequiredIntValue :: Location -> T.Text -> ArgMap -> Fail Int

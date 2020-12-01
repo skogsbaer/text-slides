@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-
 
 A plugin call such as
@@ -10,7 +11,7 @@ simply places to same content in the markdown file. The p_forAllCalls action (in
 generating the main output document) then writes to code snippets into the appropriate
 files.
 -}
-module Plugins.Code (codePlugins, LangConfig (..)) where
+module Plugins.Code (codePlugins, LangConfig (..), mkLangConfig) where
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -35,8 +36,11 @@ data LineNumberMode = LineNumbersOff | LineNumbersOn | LineNumbersAuto
 data FirstLine = FirstLineImplicit | FirstLineExplicit Int | FirstLineContinue
   deriving (Eq, Show)
 
-data CodePlace = AtStart | Here | AtEnd
+data CodePlace = AtStart | Here | AtEnd | Tagged Tag
   deriving (Eq, Show)
+
+newtype Tag = Tag T.Text
+  deriving (Eq, Show, Ord)
 
 data CodeArgs = CodeArgs
   { ca_file :: Maybe FilePath,
@@ -48,8 +52,8 @@ data CodeArgs = CodeArgs
     ca_prepend :: Maybe T.Text
   }
 
-parseArgs :: PluginCall -> Fail CodeArgs
-parseArgs call = do
+parseArgs :: PluginCall -> [T.Text] -> Fail CodeArgs
+parseArgs call extraArgs = do
   file <- getOptionalStringValue loc "file" m
   modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
   lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
@@ -77,14 +81,13 @@ parseArgs call = do
       Just "atEnd" -> return AtEnd
       Nothing -> return Here
       Just x -> error $ "uncovered case: " ++ show x
-  firstLineM <- getOptionalValue loc "firstLine" m "Int or \"continue\"" $ \v ->
-    case v of
+  firstLineM <- getOptionalValue loc "firstLine" m "Int or \"continue\"" $ \case
       ArgInt i -> Just $ FirstLineExplicit i
-      ArgString "continue" -> Just $ FirstLineContinue
+      ArgString "continue" -> Just FirstLineContinue
       _ -> Nothing
   let firstLine = fromMaybe FirstLineImplicit firstLineM
   checkForSpuriousArgs loc m
-      ["file", "mode", "lineNumbers", "firstLine", "place", "comment", "prepend"]
+      (["file", "mode", "lineNumbers", "firstLine", "place", "comment", "prepend"] ++ extraArgs)
   return $
     CodeArgs
       { ca_file = fmap T.unpack file,
@@ -126,8 +129,8 @@ runPlugin ::
   CodeState ->
   PluginCall ->
   ExceptT T.Text Action (T.Text, CodeState)
-runPlugin _langCfg _cfg _buildArgs state call = do
-  args <- exceptInM $ parseArgs call
+runPlugin langCfg _cfg _buildArgs state call = do
+  args <- exceptInM $ parseArgs call (lc_extraArgs langCfg)
   let showLineNumbers =
         case ca_lineNumberMode args of
           LineNumbersOff -> False
@@ -172,11 +175,13 @@ data CollectedCode = CollectedCode
 data CollectedCodeFile = CollectedCodeFile
   { ccf_atStart :: [CollectedCode], -- reversed
     ccf_here :: [CollectedCode], -- reversed
-    ccf_atEnd :: [CollectedCode] -- reversed
+    ccf_atEnd :: [CollectedCode], -- reversed
+    ccf_tagged :: M.Map Tag [CollectedCode] -- reversed
   }
+  deriving (Show)
 
 emptyCollectedCodeFile :: CollectedCodeFile
-emptyCollectedCodeFile = CollectedCodeFile [] [] []
+emptyCollectedCodeFile = CollectedCodeFile [] [] [] M.empty
 
 mkCollectedCodeFile :: CollectedCode -> CodePlace -> CollectedCodeFile
 mkCollectedCodeFile cc place =
@@ -184,6 +189,7 @@ mkCollectedCodeFile cc place =
     AtStart -> emptyCollectedCodeFile {ccf_atStart = [cc]}
     Here -> emptyCollectedCodeFile {ccf_here = [cc]}
     AtEnd -> emptyCollectedCodeFile {ccf_atEnd = [cc]}
+    Tagged t -> emptyCollectedCodeFile {ccf_tagged = M.singleton t [cc]}
 
 appendCollectedCode :: CollectedCode -> CodePlace -> CollectedCodeFile -> CollectedCodeFile
 appendCollectedCode cc place file =
@@ -191,12 +197,15 @@ appendCollectedCode cc place file =
     AtStart -> file {ccf_atStart = cc : ccf_atStart file}
     Here -> file {ccf_here = cc : ccf_here file}
     AtEnd -> file {ccf_atEnd = cc : ccf_atEnd file}
+    Tagged tag -> file {ccf_tagged = insertInMap (ccf_tagged file) tag }
+  where
+    insertInMap m tag = M.insertWith (++) tag [cc] m
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls langCfg cfg buildArgs calls = do
   codeMap <- exceptInM $ foldM collectCode M.empty calls
-  time <- liftIO $ getCurrentTime
+  time <- liftIO getCurrentTime
   let header =
         cmt
           ( "Automcally extracted from " <> T.pack (ba_inputFile buildArgs)
@@ -204,11 +213,17 @@ processAllCalls langCfg cfg buildArgs calls = do
               <> showText time
           )
   forM_ (M.toList codeMap) $ \(file, ccf) -> do
-    let code = mkCode (ccf_atStart ccf) <> mkCode (ccf_here ccf) <> mkCode (ccf_atEnd ccf)
+    let code =
+          mkCode (ccf_atStart ccf) <>
+          mkCode (ccf_here ccf) <>
+          lc_mkCodeForTags langCfg (mkCodeMapFromTagMap (ccf_tagged ccf)) <>
+          mkCode (ccf_atEnd ccf)
     lift $ note ("Generating " ++ file)
     lift $ myWriteFile file (header <> code)
   where
     cmt = lineComment langCfg
+    mkCodeMapFromTagMap :: M.Map Tag [CollectedCode] -> M.Map Tag T.Text
+    mkCodeMapFromTagMap = M.map mkCode
     mkCode :: [CollectedCode] -> T.Text
     mkCode revCode =
       let groupedBySectionName =
@@ -242,20 +257,26 @@ processAllCalls langCfg cfg buildArgs calls = do
                 Nothing -> return $ M.insert file (mkCollectedCodeFile cc place) m
     codeFromCall :: PluginCall -> Fail (FilePath, Maybe (CodePlace, T.Text))
     codeFromCall call = do
-      args <- parseArgs call
+      args <- parseArgs call (lc_extraArgs langCfg)
       let baseFile =
             case ca_file args of
-              Nothing -> replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
+              Nothing ->
+                lc_makeDefaultFilename langCfg $
+                replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
               Just f -> f
           file = pluginDir cfg (pc_pluginName call) </> baseFile
           body =
             maybe "" (\t -> t <> "\n") (ca_prepend args) <>
             (comment (ca_comment args) $ T.stripEnd (pc_body call))
           code = "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
-      let mCode =
-            case ca_mode args of
-              CodeModeShowOnly -> Nothing
-              _ -> Just (ca_place args, code)
+      mCode <-
+        case ca_mode args of
+          CodeModeShowOnly -> return Nothing
+          _ -> do
+            mTag <- lc_tagForCall langCfg call
+            case mTag of
+              Just tag -> return $ Just (Tagged tag, code)
+              Nothing -> return $ Just (ca_place args, code)
       return (file, mCode)
     comment False t = t
     comment True t =
@@ -266,8 +287,54 @@ processAllCalls langCfg cfg buildArgs calls = do
 data LangConfig = LangConfig
   { lc_fileExt :: String,
     lc_commentStart :: T.Text,
-    lc_commentEnd :: Maybe T.Text
+    lc_commentEnd :: Maybe T.Text,
+    lc_makeDefaultFilename :: FilePath -> FilePath,
+    lc_extraArgs :: [T.Text],
+    lc_tagForCall :: PluginCall -> Fail (Maybe Tag),
+    lc_mkCodeForTags :: M.Map Tag T.Text -> T.Text
   }
+
+mkLangConfig :: String -> T.Text -> Maybe T.Text -> LangConfig
+mkLangConfig ext commentStart commentEnd =
+  LangConfig
+  { lc_fileExt = ext,
+    lc_commentStart = commentStart,
+    lc_commentEnd = commentEnd,
+    lc_makeDefaultFilename = id,
+    lc_extraArgs = [],
+    lc_tagForCall = const (Right Nothing),
+    lc_mkCodeForTags = const ""
+  }
+
+javaLangConfig :: LangConfig
+javaLangConfig = (mkLangConfig ".java" "// " Nothing)
+  { lc_makeDefaultFilename = \fp ->
+      let replace c =
+            case c of
+              '-' -> '_'
+              _ -> c
+      in takeDirectory fp </> "Class_" ++ map replace (takeFileName fp),
+    lc_extraArgs = ["method", "body"],
+    lc_tagForCall = \call -> do
+      let loc = pc_location call
+          m = pc_args call
+      method <- fromMaybe False <$> getOptionalBoolValue loc "method" m
+      body <- fromMaybe False <$> getOptionalBoolValue loc "body" m
+      case (method, body) of
+        (False, False) -> Right Nothing
+        (True, False) -> Right (Just methodTag)
+        (False, True) -> Right (Just bodyTag)
+        (True, True) -> Left (unLocation loc <> ": cannot set method and body both to true"),
+    lc_mkCodeForTags = \m ->
+      let methodCode = fromMaybe "" $ M.lookup methodTag m
+          bodyCode = fromMaybe "" $ M.lookup bodyTag m
+      in "class __CodeContainer {\n" <> methodCode <>
+         "\n  public static void __codeContainer() {\n" <> bodyCode <>
+         "\n  }\n}"
+  }
+  where
+    methodTag = Tag "method"
+    bodyTag = Tag "body"
 
 lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
@@ -278,23 +345,23 @@ codePlugins moreLangs = flip map (languages ++ moreLangs) $ \(name, langCfg) ->
 
 languages :: [(T.Text, LangConfig)]
 languages =
-  [ ("bash", LangConfig ".sh" "# " Nothing),
-    ("c", LangConfig ".c" "// " Nothing),
-    ("cs", LangConfig ".cs" "// " Nothing),
-    ("css", LangConfig ".css" "// " Nothing),
-    ("clojure", LangConfig ".clj" ";; " Nothing),
-    ("erlang", LangConfig ".erl" "% " Nothing),
-    ("fsharp", LangConfig ".fs" "// " Nothing),
-    ("html", LangConfig ".html" "<!-- " (Just " -->")),
-    ("haskell", LangConfig ".hs" "-- " Nothing),
-    ("json", LangConfig ".json" "// " Nothing),
-    ("java", LangConfig ".java" "// " Nothing),
-    ("javascript", LangConfig ".js" "// " Nothing),
-    ("typescript", LangConfig ".ts" "// " Nothing),
-    ("ocaml", LangConfig ".ml" "(* " (Just " *)")),
-    ("objectivec", LangConfig ".m" "// " Nothing),
-    ("python", LangConfig ".py" "# " Nothing),
-    ("rust", LangConfig ".rs" "// " Nothing),
-    ("scheme", LangConfig ".sc" ";; " Nothing),
-    ("xml", LangConfig ".xml" "<!-- " (Just " -->"))
+  [ ("bash", mkLangConfig ".sh" "# " Nothing),
+    ("c", mkLangConfig ".c" "// " Nothing),
+    ("cs", mkLangConfig ".cs" "// " Nothing),
+    ("css", mkLangConfig ".css" "// " Nothing),
+    ("clojure", mkLangConfig ".clj" ";; " Nothing),
+    ("erlang", mkLangConfig ".erl" "% " Nothing),
+    ("fsharp", mkLangConfig ".fs" "// " Nothing),
+    ("html", mkLangConfig ".html" "<!-- " (Just " -->")),
+    ("haskell", mkLangConfig ".hs" "-- " Nothing),
+    ("json", mkLangConfig ".json" "// " Nothing),
+    ("java", javaLangConfig),
+    ("javascript", mkLangConfig ".js" "// " Nothing),
+    ("typescript", mkLangConfig ".ts" "// " Nothing),
+    ("ocaml", mkLangConfig ".ml" "(* " (Just " *)")),
+    ("objectivec", mkLangConfig ".m" "// " Nothing),
+    ("python", mkLangConfig ".py" "# " Nothing),
+    ("rust", mkLangConfig ".rs" "// " Nothing),
+    ("scheme", mkLangConfig ".sc" ";; " Nothing),
+    ("xml", mkLangConfig ".xml" "<!-- " (Just " -->"))
   ]

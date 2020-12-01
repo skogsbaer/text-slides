@@ -55,7 +55,7 @@ getBuildConfig opts = do
               )
             exitWith (ExitFailure 1)
   exists <- doesFileExist inputFile
-  when (not exists) $ do
+  unless exists $ do
     putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
     exitWith (ExitFailure 1)
   let searchDir = takeDirectory inputFile
@@ -122,11 +122,7 @@ getBuildConfig opts = do
         (x : _) -> return $ Just x
     languageFromExternal cfg =
       ( elc_name cfg,
-        LangConfig
-          { lc_fileExt = elc_fileExt cfg,
-            lc_commentStart = elc_commentStart cfg,
-            lc_commentEnd = elc_commentEnd cfg
-          }
+        mkLangConfig (elc_fileExt cfg) (elc_commentStart cfg) (elc_commentEnd cfg)
       )
 
 data ExternalLangConfig = ExternalLangConfig
