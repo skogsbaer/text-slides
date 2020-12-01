@@ -52,7 +52,7 @@ cmdlineOptsParser = do
         <> help
           ( T.unpack
               ( "Comma-separated list of output modes (" <> showOutputModes allOutputModes
-                  <> "), default: html"
+                  <> "), default: pdf"
               )
           )
         <> value S.empty
@@ -135,7 +135,7 @@ cmdlineOptsParser = do
           let s =
                 outputs
                   `S.union` (S.fromList (map snd (filter fst moreOutputs)))
-           in if S.null s then S.singleton OutputHtml else s
+           in if S.null s then S.singleton OutputPdf else s
      in CmdlineOpts {..}
 
 cmdlineOptsParserInfo :: ParserInfo CmdlineOpts
