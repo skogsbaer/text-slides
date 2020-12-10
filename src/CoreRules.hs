@@ -94,10 +94,10 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
              ]
           ++ optIfSet "--lua-filter=" (bc_luaFilter cfg)
       latexArgs = do
-        needIfSet (bc_beamerHeader cfg)
+        need (bc_beamerHeader cfg)
         return $
-          ["--to=beamer"]
-            ++ optIfSet "--include-in-header=" (bc_beamerHeader cfg)
+          ["--to=beamer"] ++
+          (flip map (bc_beamerHeader cfg) $ \h -> "--include-in-header=" ++ h)
       htmlArgs = do
         needIfSet (bc_htmlHeader cfg)
         return $

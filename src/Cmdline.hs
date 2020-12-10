@@ -88,7 +88,8 @@ cmdlineOptsParser = do
           <> help
             ( "File to insert into the header of a beamer presentation. Can also be set by "
                 ++ "placing the file beamer-header.tex next to the input file or inside "
-                ++ "$HOME/.text-slides."
+                ++ "$HOME/.text-slides. All files found are place in the header of the "
+                ++ "presentation."
             )
   co_htmlHeader <-
     optional $

@@ -73,7 +73,7 @@ data GenericBuildConfig m = BuildConfig
     bc_python :: FilePath, -- python 3
     bc_convert :: FilePath, -- imagemagick
     bc_mermaid :: FilePath,
-    bc_beamerHeader :: Maybe FilePath,
+    bc_beamerHeader :: [FilePath],
     bc_htmlHeader :: Maybe FilePath,
     bc_luaFilter :: Maybe FilePath,
     bc_syntaxTheme :: Maybe SyntaxTheme,

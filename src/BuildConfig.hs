@@ -60,7 +60,8 @@ getBuildConfig opts = do
     exitWith (ExitFailure 1)
   let searchDir = takeDirectory inputFile
       searchFile = searchFile' searchDir
-  beamerHeader <- searchFile "beamer-header.tex" (co_beamerHeader opts) >>= canonicalize
+      searchFiles = searchFiles' searchDir
+  beamerHeader <- searchFiles "beamer-header.tex" (co_beamerHeader opts) >>= mapM canonicalizePath
   infoIO ("beamerHeader: " ++ show beamerHeader)
   htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
   infoIO ("htmlHeader: " ++ show htmlHeader)
@@ -110,16 +111,19 @@ getBuildConfig opts = do
       cp <- canonicalizePath p
       return (Just cp)
     searchFile' :: FilePath -> FilePath -> Maybe FilePath -> IO (Maybe FilePath)
-    searchFile' _ _ (Just fromCmdLine) = return $ Just fromCmdLine
-    searchFile' searchDir path Nothing = do
+    searchFile' searchDir path mCmdLine = do
+      allFiles <- searchFiles' searchDir path mCmdLine
+      case reverse allFiles of
+        [] -> return Nothing
+        (x:_) -> return (Just x)
+    searchFiles' :: FilePath -> FilePath -> Maybe FilePath -> IO [FilePath]
+    searchFiles' searchDir path mCmdLine = do
       homeCfgDir <- getHomeCfgDir
-      let candidates = [searchDir </> path, homeCfgDir </> path]
+      let candidates = [homeCfgDir </> path, searchDir </> path]
       results <- forM candidates $ \cand -> do
         b <- doesFileExist cand
         return $ if b then Just cand else Nothing
-      case catMaybes results of
-        [] -> return Nothing
-        (x : _) -> return $ Just x
+      return $ catMaybes (results ++ [mCmdLine])
     languageFromExternal cfg =
       ( elc_name cfg,
         mkLangConfig (elc_fileExt cfg) (elc_commentStart cfg) (elc_commentEnd cfg)
