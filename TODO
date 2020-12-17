@@ -1,6 +1,5 @@
 - Support multiple beamer-headers (simply pass all
   header files to pandoc)
-- make PDF the default
 - cleanup generated code files
 
 - Replace the options --beamer-header, --html-header,
