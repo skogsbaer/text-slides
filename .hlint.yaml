@@ -1,0 +1,6 @@
+- ignore: {name: Redundant bracket}
+- ignore: {name: Use newtype instead of data}
+- ignore: {name: Avoid lambda using `infix`}
+- ignore: {name: Move brackets to avoid $}
+- ignore: {name: Use if}
+- ignore: {name: Avoid lambda}
