@@ -26,6 +26,7 @@ import Logging
 import System.FilePath
 import Types
 import Utils
+import qualified Data.Set as Set
 
 data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
   deriving (Eq, Show)
@@ -340,8 +341,11 @@ lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
 
 codePlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
-codePlugins moreLangs = flip map (languages ++ moreLangs) $ \(name, langCfg) ->
+codePlugins moreLangs =
+  flip map (filter (\(k, _) -> not (k `Set.member` custom)) languages ++ moreLangs) $ \(name, langCfg) ->
   AnyPluginConfig $ mkCodePlugin (PluginName name) langCfg
+  where
+    custom = Set.fromList (map fst moreLangs)
 
 languages :: [(T.Text, LangConfig)]
 languages =
