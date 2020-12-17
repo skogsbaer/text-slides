@@ -330,7 +330,7 @@ javaLangConfig = (mkLangConfig ".java" "// " Nothing)
       let methodCode = fromMaybe "" $ M.lookup methodTag m
           bodyCode = fromMaybe "" $ M.lookup bodyTag m
       in "class __CodeContainer {\n" <> methodCode <>
-         "\n  public static void __codeContainer() {\n" <> bodyCode <>
+         "\n  public static void __codeContainer() throws Exception {\n" <> bodyCode <>
          "\n  }\n}"
   }
   where
