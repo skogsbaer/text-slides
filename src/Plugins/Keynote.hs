@@ -18,7 +18,6 @@ module Plugins.Keynote
   )
 where
 
-import Control.Monad
 import Control.Monad.Trans.Except
 import qualified Data.List as L
 import Data.Maybe
@@ -109,14 +108,14 @@ buildPathToKeynoteFile cfg (normalise -> fp) = do
       | relDir `L.isPrefixOf` fp -> Right (drop (length relDir) fp)
       | otherwise -> Left ("not a build path: " <> T.pack fp)
 
--- build/plugins/keynote/<my_presentation>/slides/slides.001.jpeg ~~>
+-- build/plugins/keynote/<my_presentation>/slides/slides.001.pdf ~~>
 -- build/plugins/keynote/<my_presentation>/presentation.keyhash
 slideImagePathToPresentationHashPath :: FilePath -> Maybe FilePath
 slideImagePathToPresentationHashPath (normalise -> fp) =
   let comps = splitDirectories fp
    in case reverse comps of
         (file : "slides" : rest)
-          | isJpegFile file -> Just $ joinPath (reverse rest) </> "presentation.keyhash"
+          | isPdfFile file -> Just $ joinPath (reverse rest) </> "presentation.keyhash"
           | otherwise -> Nothing
         _ -> Nothing
 
@@ -128,32 +127,18 @@ runKeynoteExport cfg hashFile = do
   let script = keynoteExportScript dataDir
       outDir = takeDirectory hashFile
   liftIO $ removeDirectoryRecursive (outDir </> "slides")
-  note ("Exporting images from " ++ keyFile)
+  note ("Exporting PDFs from " ++ keyFile)
   hash <- needWithHash keyFile
   let exportArgs = [script, "-k", keyFile, "-o", outDir]
   mySystem INFO (bc_python cfg) exportArgs Nothing
-  jpegs <- liftIO $ myListDirectory (outDir </> "slides") isJpegFile
-  forM_ jpegs $ \jpeg -> do
-    let (d, f) = splitFileName jpeg
-    liftIO $ copyFile jpeg (d </> fixImageFileName f)
-    mySystem
-      INFO
-      (bc_convert cfg)
-      [jpeg, "-trim", d </> ("trimmed_" ++ fixImageFileName f)]
-      Nothing
   myWriteFile hashFile (unHash hash)
-  where
-    fixImageFileName f =
-      -- latex does not like images ending with .001.jpeg
-      let slideNo = tail $ takeExtension (dropExtension f)
-       in "slides_" ++ slideNo ++ ".jpg"
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg _args = do
-  isKeynoteJpeg ?> \jpg -> need [fromJust (slideImagePathToPresentationHashPath jpg)]
+  isKeynotePdf ?> \jpg -> need [fromJust (slideImagePathToPresentationHashPath jpg)]
   "//presentation.keyhash" %> runKeynoteExport cfg
   where
-    isKeynoteJpeg fp = isJust (slideImagePathToPresentationHashPath fp)
+    isKeynotePdf fp = isJust (slideImagePathToPresentationHashPath fp)
 
 runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
 runPlugin cfg _buildArgs () call = do
@@ -163,8 +148,8 @@ runPlugin cfg _buildArgs () call = do
   let relDir = makeRelative (bc_buildDir cfg) dir
       fileName =
         if ka_trim args
-          then printf "trimmed_slides_%03d.jpg" (ka_slide args)
-          else printf "slides_%03d.jpg" (ka_slide args)
+          then printf "slides_%03d-crop.pdf" (ka_slide args)
+          else printf "slides_%03d.pdf" (ka_slide args)
       imgFile = relDir </> "slides" </> fileName
       dimensions =
         case catMaybes

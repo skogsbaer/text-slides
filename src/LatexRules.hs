@@ -235,7 +235,7 @@ genFmt cfg fmt = do
 
 latexRules :: BuildConfig -> BuildArgs -> Rules ()
 latexRules cfg _args = do
-  (bc_buildDir cfg ++ "//*.pdf") %> genPdf cfg
-  (bc_buildDir cfg ++ ("//*") <> texBodyExt) %> genTexBody
-  (bc_buildDir cfg ++ ("//*") <> texPreambleExt) %> genTexPreamble
-  (bc_buildDir cfg ++ "//*.fmt") %> genFmt cfg
+  (bc_buildDir cfg ++ "/*.pdf") %> genPdf cfg
+  (bc_buildDir cfg ++ ("/*") <> texBodyExt) %> genTexBody
+  (bc_buildDir cfg ++ ("/*") <> texPreambleExt) %> genTexPreamble
+  (bc_buildDir cfg ++ "/*.fmt") %> genFmt cfg

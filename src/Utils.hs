@@ -119,6 +119,9 @@ needWithHash fp = do
 isJpegFile :: FilePath -> Bool
 isJpegFile fp = takeExtension fp `elem` [".jpg", ".jpeg"]
 
+isPdfFile :: FilePath -> Bool
+isPdfFile fp = takeExtension fp == ".pdf"
+
 myListDirectory :: FilePath -> (FilePath -> Bool) -> IO [FilePath]
 myListDirectory dir pred = do
   fs <- listDirectory dir
