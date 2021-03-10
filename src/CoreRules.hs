@@ -1,5 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module CoreRules
   ( coreRules,
@@ -30,10 +31,9 @@ import Utils
 getDependenciesFromPandocJson :: FilePath -> IO [FilePath]
 getDependenciesFromPandocJson inFile = do
   jsonValue <-
-    J.eitherDecodeFileStrict' inFile >>= \res ->
-      case res of
-        Right x -> return x
-        Left s -> fail ("Cannot parse JSON file " ++ inFile ++ ": " ++ s)
+    J.eitherDecodeFileStrict' inFile >>= \case
+      Right x -> return x
+      Left s -> fail ("Cannot parse JSON file " ++ inFile ++ ": " ++ s)
   let deps = extractDeps jsonValue S.empty
   return (S.toList deps)
   where
@@ -74,7 +74,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
   -- The deps are relative to the build dir
   need (map (\f -> bc_buildDir cfg </> f) deps)
   syntaxDefs <-
-    flip mapM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
+    forM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
       need [f]
       return ("--syntax-definition=" ++ f)
   hightlightTheme <-
@@ -96,7 +96,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
       latexArgs = do
         need (bc_beamerHeader cfg)
         return $
-          ["--to=beamer"] ++
+          "--to=beamer" :
           (flip map (bc_beamerHeader cfg) $ \h -> "--include-in-header=" ++ h)
       htmlArgs = do
         needIfSet (bc_htmlHeader cfg)
@@ -136,11 +136,10 @@ transformMarkdown warnFun cfg buildArgs inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
   (revLines, _) <- foldM tokenToLine ([], M.empty) tokens
   let calls =
-        flip mapMaybe tokens $ \tok ->
-          case tok of
-            Line _ -> Nothing
-            Plugin call -> Just call
-  return $ (T.unlines $ reverse revLines, calls)
+        flip mapMaybe tokens $ \case
+          Line _ -> Nothing
+          Plugin call -> Just call
+  return (T.unlines $ reverse revLines, calls)
   where
     tokenToLine ::
       ([T.Text], M.Map PluginName (AnyPluginWithState m)) ->
@@ -177,9 +176,7 @@ transformMarkdown warnFun cfg buildArgs inFile md = do
               state <- p_init plugin
               return (AnyPluginWithState plugin state)
     pluginKindMap =
-      flip M.map (bc_plugins cfg) $ \pws ->
-        case pws of
-          AnyPluginConfig plugin -> p_kind plugin
+      flip M.map (bc_plugins cfg) $ \(AnyPluginConfig plugin) -> p_kind plugin
 
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
@@ -195,12 +192,12 @@ generateRawMarkdown cfg args inFile outFile = do
         Just (AnyPluginConfig plugin) ->
           runExceptT $ p_forAllCalls plugin cfg args calls
     case res of
-      Left err -> do
+      Left err ->
         warn
-          ( "Processing all calls of plugin " ++ T.unpack (unPluginName pluginName)
-              ++ " failed: "
-              ++ T.unpack err
-          )
+        ( "Processing all calls of plugin " ++ T.unpack (unPluginName pluginName)
+            ++ " failed: "
+            ++ T.unpack err
+        )
       Right () -> return ()
   myWriteFile outFile rawMd
 
@@ -221,7 +218,7 @@ coreRules cfg args = do
   latexRules cfg args
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
-  sequence_ $ map (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
+  mapM_ (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
   isStaticOutFile ?> publishStaticFile
   where
     outFile ext = mainOutputFile cfg args ext
@@ -231,7 +228,7 @@ coreRules cfg args = do
       takeExtension f `elem` [".jpg", ".jpeg", ".png"]
         && bc_buildDir cfg `isPathPrefix` f
         && not (pluginDir' cfg `isPathPrefix` f)
-    publishStaticFile out = do
+    publishStaticFile out =
       copyFileChanged (outputFileToInputFile cfg args out) out
 
 mdRawExt :: String

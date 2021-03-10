@@ -2,6 +2,7 @@ module Utils where
 
 import Control.Exception
 import Control.Monad.IO.Class
+import Data.Bifunctor
 import qualified Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
@@ -53,7 +54,7 @@ mySystem ll prog args mEnv = do
     withTiming $
       traced (takeBaseName prog) $
         withDevNull $ \devNull -> do
-          let myEnv = flip fmap mEnv $ \m -> map (\(x, y) -> (T.unpack x, T.unpack y)) $ M.toList m
+          let myEnv = flip fmap mEnv $ \m -> map (bimap T.unpack T.unpack) $ M.toList m
               process = (proc prog args) {std_out = UseHandle devNull, env = myEnv}
           (_, _, _, p) <- createProcess process
           waitForProcess p
@@ -69,9 +70,7 @@ myReadFileBs fp =
   do
     need [fp]
     debug ("Reading file " ++ fp)
-    bs <- liftIO $ BS.readFile fp
-    debug ("Finished reading file " ++ fp)
-    return bs
+    liftIO $ BS.readFile fp
 
 myReadFile :: FilePath -> Action T.Text
 myReadFile fp =
@@ -88,7 +87,6 @@ myWriteFile fp t =
     liftIO $ createDirectoryIfMissing True (takeDirectory fp)
     let bs = T.encodeUtf8 t
     liftIO $ BS.writeFile fp bs
-    debug ("Finished writing file " ++ fp)
 
 showText :: Show a => a -> T.Text
 showText = T.pack . show
@@ -113,8 +111,7 @@ md5OfFile fp = do
 needWithHash :: FilePath -> Action Hash
 needWithHash fp = do
   need [fp]
-  h <- liftIO $ md5OfFile fp
-  return h
+  liftIO $ md5OfFile fp
 
 isJpegFile :: FilePath -> Bool
 isJpegFile fp = takeExtension fp `elem` [".jpg", ".jpeg"]

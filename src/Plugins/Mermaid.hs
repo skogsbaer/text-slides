@@ -1,7 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {-
 
@@ -135,7 +133,7 @@ processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls cfg _buildArgs calls = do
   -- remove unreference files
-  allHashes <- forM calls $ \call -> mermaidCallAndHash call >>= (return . snd)
+  allHashes <- forM calls $ mermaidCallAndHash >=> (return . snd)
   let setOfHashes = S.fromList (map unHash allHashes)
   files <-
     liftIO $

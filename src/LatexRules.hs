@@ -1,6 +1,7 @@
 module LatexRules (latexRules) where
 
 import Control.Monad
+import Data.Bifunctor
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.List as L
@@ -40,7 +41,7 @@ findPhrase t (x : xs) =
 
 mkLatexEnv :: BuildConfig -> IO Env
 mkLatexEnv cfg = do
-  oldEnv <- M.fromList . map (\(x, y) -> (T.pack x, T.pack y)) <$> liftIO getEnvironment
+  oldEnv <- M.fromList . map (bimap T.pack T.pack) <$> liftIO getEnvironment
   let sep = T.singleton searchPathSeparator
       texInputs =
         case M.lookup texInputsKey oldEnv of
@@ -60,7 +61,7 @@ data Frame = Frame
 parseFrameFromTex :: T.Text -> [Frame]
 parseFrameFromTex text =
   let frames = reverse $ loop [] Nothing (zip (T.lines text) [1 ..])
-   in map (\(f, slideNo) -> f {f_slideNo = slideNo}) (zip frames [2 ..])
+   in zipWith (\f slideNo -> f {f_slideNo = slideNo}) frames [2 ..]
   where
     loop acc _ [] = acc
     loop acc ctx ((line, no) : rest)
@@ -89,7 +90,6 @@ checkForOverfullSlides pdf = do
   texSrc <- liftIO $ readFileWithUnknownEncoding tex
   let frames = parseFrameFromTex texSrc
   forM_ overfullVBoxes (warnOverfullVBox frames)
-  return ()
   where
     log = pdf -<.> ".log"
     tex = pdf -<.> ".texbody"
@@ -170,7 +170,7 @@ genPdf cfg pdf = do
                     ++ " frame numbers are still wrong"
                 return False
               else do
-                note $ "Re-running latex because frame numbers changed"
+                note "Re-running latex because frame numbers changed"
                 return True
       when needRerun $ runPdfLatex env (runNo + 1)
     maxReruns = 3

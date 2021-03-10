@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module Parser where
 
 import Control.Monad
