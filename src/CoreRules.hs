@@ -70,9 +70,8 @@ data PandocMode = PandocModeHtml | PandocModeLatex
 runPandoc :: GenericBuildConfig m -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
 runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
   need [inFile]
-  deps <- liftIO $ getDependenciesFromPandocJson inFile
-  -- The deps are relative to the build dir
-  need (map (\f -> bc_buildDir cfg </> f) deps)
+  deps <- fmap (map (\f -> bc_buildDir  cfg </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
+  writeDeps outFile deps
   syntaxDefs <-
     forM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
       need [f]
@@ -213,8 +212,10 @@ coreRules cfg args = do
   -- Pandoc just blindly reruns pdflatex 2 times, even if it's not necessary. We further
   -- speed up compilation by caching the preamble with mylatexformat. To make this work,
   -- the latex source code must contain \endofdump at the start of a line.
-  outFile ".html" %> runPandoc cfg args PandocModeHtml json
-  outFile ".tex" %> runPandoc cfg args PandocModeLatex json
+  [outFile ".html"] &%> \[html, _] ->
+    void $ runPandoc cfg args PandocModeHtml json html
+  [outFile ".tex", outFile ".deps"] &%> \[tex, _] ->
+    void $ runPandoc cfg args PandocModeLatex json tex
   latexRules cfg args
   raw %> generateRawMarkdown cfg args (ba_inputFile args)
   json %> generateJson cfg raw
@@ -225,21 +226,18 @@ coreRules cfg args = do
     raw = outFile mdRawExt
     json = outFile ".json"
     isStaticOutFile f =
-      takeExtension f `elem` [".jpg", ".jpeg", ".png"]
+      (isImage f || isStaticPdf f)
         && bc_buildDir cfg `isPathPrefix` f
         && not (pluginDir' cfg `isPathPrefix` f)
     publishStaticFile out =
       copyFileChanged (outputFileToInputFile cfg args out) out
+    isImage f = takeExtension f `elem` [".jpg", ".jpeg", ".png"]
+    isStaticPdf f =
+      takeExtension f == ".pdf" &&
+      takeBaseName (ba_inputFile args) /= takeBaseName f
 
 mdRawExt :: String
 mdRawExt = ".mdraw"
-
--- To keep things simple, the output file for the presentation is always placed at the
--- toplevel of the build dir. This means, that two input files must not have the same
--- basename.
-mainOutputFile :: BuildConfig -> BuildArgs -> String -> FilePath
-mainOutputFile cfg args ext =
-  bc_buildDir cfg </> takeBaseName (ba_inputFile args) <.> ext
 
 mdRawOutputFile :: BuildConfig -> BuildArgs -> FilePath
 mdRawOutputFile cfg args = mainOutputFile cfg args mdRawExt

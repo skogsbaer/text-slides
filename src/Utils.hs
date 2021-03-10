@@ -80,6 +80,18 @@ myReadFile fp =
       Right t -> return t
       Left err -> fail ("File " ++ fp ++ " is not valid UTF-8: " ++ show err)
 
+myReadFileIfExists :: FilePath -> Action (Maybe T.Text)
+myReadFileIfExists fp = do
+  ex <- Development.Shake.doesFileExist fp
+  if ex
+    then do
+      t <- myReadFile fp
+      return (Just t)
+    else do
+      dir <- liftIO getCurrentDirectory
+      debug ("Not reading " ++ fp ++ " because it does not exist (cwd: " ++ dir ++ ")")
+      return Nothing
+
 myWriteFile :: FilePath -> T.Text -> Action ()
 myWriteFile fp t =
   do

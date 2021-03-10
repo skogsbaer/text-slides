@@ -135,7 +135,7 @@ runKeynoteExport cfg hashFile = do
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg _args = do
-  isKeynotePdf ?> \jpg -> need [fromJust (slideImagePathToPresentationHashPath jpg)]
+  isKeynotePdf ?> \pdf -> need [fromJust (slideImagePathToPresentationHashPath pdf)]
   "//presentation.keyhash" %> runKeynoteExport cfg
   where
     isKeynotePdf fp = isJust (slideImagePathToPresentationHashPath fp)

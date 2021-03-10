@@ -17,6 +17,7 @@ import System.Environment
 import System.FilePath
 import Types
 import Utils
+import RuleUtils
 
 texBodyExt :: String
 texBodyExt = ".texbody"
@@ -123,6 +124,9 @@ readFileWithUnknownEncoding fp = do
 genPdf :: BuildConfig -> FilePath -> Action ()
 genPdf cfg pdf = do
   need [pdf -<.> texBodyExt, pdf -<.> preambleCacheExt]
+  deps <- readDeps pdf
+  need deps
+  info ("Deps for " ++ pdf ++ ": " ++ show deps)
   env <- liftIO $ mkLatexEnv cfg
   note ("Generating " ++ pdf)
   runPdfLatex env 0
@@ -234,8 +238,8 @@ genFmt cfg fmt = do
         (Just env)
 
 latexRules :: BuildConfig -> BuildArgs -> Rules ()
-latexRules cfg _args = do
-  (bc_buildDir cfg ++ "/*.pdf") %> genPdf cfg
+latexRules cfg args = do
+  (mainOutputFile cfg args "pdf") %> genPdf cfg
   (bc_buildDir cfg ++ ("/*") <> texBodyExt) %> genTexBody
   (bc_buildDir cfg ++ ("/*") <> texPreambleExt) %> genTexPreamble
   (bc_buildDir cfg ++ "/*.fmt") %> genFmt cfg
