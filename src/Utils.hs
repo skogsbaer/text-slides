@@ -19,6 +19,7 @@ import System.FilePath
 import System.IO
 import System.Process
 import Text.Printf
+import Data.Maybe
 
 withTiming :: MonadIO m => m a -> m (Double, a)
 withTiming action = do
@@ -139,3 +140,18 @@ myListDirectory dir pred = do
 isPathPrefix :: FilePath -> FilePath -> Bool
 isPathPrefix prefix full =
   normalise prefix `L.isPrefixOf` normalise full
+
+markdownImage :: FilePath -> (Maybe T.Text, Maybe T.Text) -> Bool -> T.Text
+markdownImage path (width, height) center =
+  let dimensions =
+        case catMaybes
+          [ fmap (\w -> "width=" <> w) width,
+            fmap (\w -> "height=" <> w) height
+          ] of
+          [] -> ""
+          l -> "{" <> T.intercalate " " l <> "}"
+      prefix =
+        case center of
+          True -> "![center]"
+          False -> "![]"
+  in prefix <> "(" <> T.pack path <> ")" <> dimensions

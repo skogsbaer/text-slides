@@ -67,6 +67,8 @@ getBuildConfig opts = do
   infoIO ("htmlHeader: " ++ show htmlHeader)
   luaFilter <- searchFile "pandoc-filter.lua" (co_luaFilter opts) >>= canonicalize
   infoIO ("luaFilter: " ++ show luaFilter)
+  mermaidConfig <- searchFile "mermaid-config.json" (co_mermaidConfig opts) >>= canonicalize
+  infoIO ("mermaidConfig: " ++ show luaFilter)
   syntaxTheme <- do
     mf <- searchFile "syntax-highlighting.theme" (co_syntaxTheme opts)
     case mf of
@@ -87,9 +89,11 @@ getBuildConfig opts = do
             bc_python = "python3",
             bc_convert = "convert",
             bc_mermaid = "mmdc",
+            bc_pdfcrop = "pdfcrop",
             bc_beamerHeader = beamerHeader,
             bc_htmlHeader = htmlHeader,
             bc_luaFilter = luaFilter,
+            bc_mermaidConfig = mermaidConfig,
             bc_syntaxTheme = syntaxTheme,
             bc_plugins =
               M.fromList $

@@ -32,6 +32,7 @@ data CmdlineOpts = CmdlineOpts
     co_beamerHeader :: Maybe FilePath,
     co_htmlHeader :: Maybe FilePath,
     co_luaFilter :: Maybe FilePath,
+    co_mermaidConfig :: Maybe FilePath,
     co_syntaxTheme :: Maybe FilePath,
     co_outputs :: !(S.Set OutputMode),
     co_debug :: !Bool,
@@ -109,6 +110,16 @@ cmdlineOptsParser = do
           <> help
             ( "Lua filter for pandoc. Can also be set by "
                 ++ "placing the file pandoc-filter.lua next to the input file or inside "
+                ++ "$HOME/.text-slides."
+            )
+  co_mermaidConfig <-
+    optional $
+      option str $
+        long "mermaid-config"
+          <> metavar "FILE"
+          <> help
+            ( "JSON file for configuring mermaid. Can also be set by "
+                ++ "placing the file mermaid-config.json next to the input file or inside "
                 ++ "$HOME/.text-slides."
             )
   co_syntaxTheme <-

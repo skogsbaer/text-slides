@@ -24,6 +24,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Maybe
 import Development.Shake
 import Development.Shake.FilePath
 import GHC.Generics
@@ -33,15 +34,21 @@ import Types
 import Utils
 
 data MermaidArgs = MermaidArgs
-  { ma_width :: Maybe Int,
-    ma_height :: Maybe Int
+  { ma_width :: Maybe T.Text,
+    ma_height :: Maybe T.Text,
+    ma_imageWidth :: Maybe Int,
+    ma_imageHeight :: Maybe Int,
+    ma_center :: Bool
   }
 
 parseArgs :: PluginCall -> Fail MermaidArgs
 parseArgs call = do
-  ma_width <- getOptionalIntValue loc "width" argMap
-  ma_height <- getOptionalIntValue loc "height" argMap
-  checkForSpuriousArgs loc argMap ["width", "height"]
+  ma_imageWidth <- getOptionalIntValue loc "imageWidth" argMap
+  ma_imageHeight <- getOptionalIntValue loc "imageHeight" argMap
+  ma_width <- getOptionalStringValue loc "width" argMap
+  ma_height <- getOptionalStringValue loc "height" argMap
+  ma_center <- fromMaybe False <$> getOptionalBoolValue loc "center" argMap
+  checkForSpuriousArgs loc argMap ["width", "height", "imageWidth", "imageHeight", "center"]
   return MermaidArgs {..}
   where
     loc = pc_location call
@@ -63,9 +70,9 @@ mermaidPlugin =
       }
 
 runMermaid :: BuildConfig -> BuildArgs -> FilePath -> Action ()
-runMermaid cfg _buildArgs pngFile = do
-  let jsonFile = replaceExtension pngFile ".json"
-      mddFile = replaceExtension pngFile ".mdd"
+runMermaid cfg _buildArgs pdfFile = do
+  let jsonFile = replaceExtension pdfFile ".json"
+      mddFile = replaceExtension pdfFile ".mdd"
   need [jsonFile, mddFile]
   json <- liftIO $ BSL.readFile jsonFile
   case J.decode' json of
@@ -74,19 +81,21 @@ runMermaid cfg _buildArgs pngFile = do
         ( "Cannot read " ++ show jsonFile ++ ", cannot run mermaid. "
             ++ "Try to remove the build directory"
         )
-    Just mermaidCall -> do
+    Just mermaidCall -> withTempDir $ \dir -> do
+      let tmpPdf = dir </> "mermaid.pdf"
       note
         ( "Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall) ++ " to produce "
-            ++ pngFile
+            ++ pdfFile
         )
       let mermaidArgs =
             map T.unpack (mc_args mermaidCall)
-              ++ ["--input", mddFile, "--output", pngFile, "--scale", "8"]
+              ++ ["--input", mddFile, "--output", tmpPdf, "--scale", "8"]
       mySystem INFO (bc_mermaid cfg) mermaidArgs Nothing
+      mySystem INFO (bc_pdfcrop cfg) [tmpPdf, pdfFile] Nothing
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do
-  (pluginDir cfg mermaidPluginName) ++ "/*.png" %> runMermaid cfg args
+  (pluginDir cfg mermaidPluginName) ++ "/*.pdf" %> runMermaid cfg args
   (pluginDir cfg mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile cfg args]
   (pluginDir cfg mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile cfg args]
 
@@ -105,7 +114,8 @@ mermaidCallAndHash call = do
   args <- exceptInM $ parseArgs call
   let mermaidCall =
         MermaidCall
-          { mc_args = toArg "--width" (ma_width args) ++ toArg "--height" (ma_height args),
+          { mc_args =
+              toArg "--width" (ma_imageWidth args) ++ toArg "--height" (ma_imageHeight args),
             mc_where = unLocation (pc_location call)
           }
       hash = md5OfText (showText mermaidCall <> pc_body call)
@@ -116,29 +126,30 @@ mermaidCallAndHash call = do
 
 runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
 runPlugin cfg _buildArgs () call = do
+  args <- exceptInM $ parseArgs call
   (mermaidCall, hash) <- mermaidCallAndHash call
   let outDir = pluginDir cfg mermaidPluginName
       outFile ext =
         pluginDir cfg mermaidPluginName </> T.unpack (unHash hash) <.> ext
-      diagFile = outFile ".png"
+      diagFile = outFile ".pdf"
       -- all output files are place directly in the build directory
       relDiagFile = makeRelative (bc_buildDir cfg) diagFile
   liftIO $ createDirectoryIfMissing True outDir
   liftIO $ J.encodeFile (outFile ".json") mermaidCall
   liftIO $ T.writeFile (outFile ".mdd") (pc_body call)
-  let res = "![](" <> T.pack relDiagFile <> ")"
+  let res = markdownImage relDiagFile (ma_width args, ma_height args) (ma_center args)
   return (res, ())
 
 processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls cfg _buildArgs calls = do
-  -- remove unreference files
+  -- remove unreferenced files
   allHashes <- forM calls $ mermaidCallAndHash >=> (return . snd)
   let setOfHashes = S.fromList (map unHash allHashes)
   files <-
     liftIO $
       myListDirectory (pluginDir cfg mermaidPluginName) $ \f ->
-        takeExtension f `elem` [".png", ".json", ".mdd"]
+        takeExtension f `elem` [".pdf", ".json", ".mdd"]
   forM_ files $ \file -> do
     let hash = T.pack $ takeBaseName file
     unless (hash `S.member` setOfHashes) (liftIO $ removeFile file)

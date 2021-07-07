@@ -151,18 +151,7 @@ runPlugin cfg _buildArgs () call = do
           then printf "slides_%03d-crop.pdf" (ka_slide args)
           else printf "slides_%03d.pdf" (ka_slide args)
       imgFile = relDir </> "slides" </> fileName
-      dimensions =
-        case catMaybes
-          [ fmap (\w -> "width=" <> w) (ka_width args),
-            fmap (\w -> "height=" <> w) (ka_height args)
-          ] of
-          [] -> ""
-          l -> "{" <> T.intercalate " " l <> "}"
-      prefix =
-        case ka_center args of
-          True -> "![center]"
-          False -> "![]"
-      res = prefix <> "(" <> T.pack imgFile <> ")" <> dimensions
+      res = markdownImage imgFile (ka_width args, ka_height args) (ka_center args)
   return (res, ())
 
 processAllCalls ::
