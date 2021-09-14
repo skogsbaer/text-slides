@@ -10,7 +10,7 @@
         },
         "python.autoComplete.extraPaths": [
             "bar",
-            "/Users/swehr/.vscode/extensions/stefanwehr.write-your-python-program-0.9.1/python/src/"
+            "/Users/swehr/.vscode/extensions/stefanwehr.write-your-python-program-0.11.2/python/src/"
         ],
         "python.linting.enabled": false
     }
