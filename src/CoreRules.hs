@@ -212,7 +212,7 @@ coreRules cfg args = do
   -- Pandoc just blindly reruns pdflatex 2 times, even if it's not necessary. We further
   -- speed up compilation by caching the preamble with mylatexformat. To make this work,
   -- the latex source code must contain \endofdump at the start of a line.
-  [outFile ".html"] &%> \[html, _] ->
+  [outFile ".html"] &%> \[html] ->
     void $ runPandoc cfg args PandocModeHtml json html
   [outFile ".tex", outFile ".deps"] &%> \[tex, _] ->
     void $ runPandoc cfg args PandocModeLatex json tex

@@ -43,6 +43,11 @@ library:
     - unordered-containers
     - unix
     - vector
+  ghc-options:
+    - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
+    - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind
+    - -fwarn-missing-signatures -fno-warn-partial-type-signatures
+    - -Wredundant-constraints -fwarn-incomplete-patterns
 
 executable:
   main: Main.hs
@@ -50,6 +55,11 @@ executable:
   dependencies:
     - base
     - text-slides
+  ghc-options:
+    - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
+    - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind
+    - -fwarn-missing-signatures -fno-warn-partial-type-signatures
+    - -Wredundant-constraints -fwarn-incomplete-patterns -rtsopts
 
 tests:
   unit-tests:
@@ -71,12 +81,12 @@ tests:
       - transformers
       - vector
     build-tools: HTF
+    ghc-options:
+      - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
+      - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind
+      - -fwarn-missing-signatures -fno-warn-partial-type-signatures
+      - -Wredundant-constraints -fwarn-incomplete-patterns -rtsopts
 
-ghc-options:
-  - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
-  - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind
-  - -fwarn-missing-signatures -fno-warn-partial-type-signatures
-  - -Wredundant-constraints -rtsopts
 
 default-extensions:
   - DeriveDataTypeable
