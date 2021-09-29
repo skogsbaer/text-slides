@@ -256,6 +256,18 @@ text-slides is the `pygments` theme. Here's how to use a different theme:
 For a theme include with pandoc, you can save to definition to a file with this command:
 `pandoc --print-highlight-style NAME_OF_THEME > FILE`
 
+## Structuring Code
+
+### Java
+
+* Use `~~~java(file:"SomeClassName.java)` to put java code into an extra file.
+* Use `~~~java(body:true)` states that the content of the code block is a method body.
+  That is, the code is wrapped with a method and a class.
+  * Variation: `~~~java(body:"foo")` introduces identifer `foo` for the code block. All blocks
+    with the same identifier are put in the same method.
+* Use `~~~java(method:true)` states that the content of the code block is a method. That is,
+  the code is wrapped with a class.
+
 ## Performance
 
 To speed up PDF generation, supply a custom latex header (see above) and insert
