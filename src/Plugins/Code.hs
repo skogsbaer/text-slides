@@ -146,7 +146,7 @@ runPlugin langCfg _cfg _buildArgs state call = do
           FirstLineImplicit -> 1
           FirstLineExplicit i -> i
           FirstLineContinue -> cs_nextLineNumber state
-      body = pc_body call
+      body = extractCode langCfg CodeExctractPresentation (Code (pc_body call))
       nextState =
         CodeState
           { cs_nextLineNumber =
@@ -171,8 +171,40 @@ runPlugin langCfg _cfg _buildArgs state call = do
           CodeModeHide -> ""
   return (result, nextState)
 
+-- The text wrapped in the Code newtype may contain directives
+-- such as `# ~~~hide`.
+newtype Code = Code T.Text
+  deriving (Eq, Show)
+
+data CodeExtract = CodeExtractFile | CodeExctractPresentation
+
+extractCode :: LangConfig -> CodeExtract -> Code -> T.Text
+extractCode lcfg mode (Code t) =
+  let lines = T.lines t
+      newLines = loop True lines []
+  in T.unlines newLines
+  where
+    loop _ [] acc = reverse acc
+    loop show (l:ls) acc =
+      case parseShowHide l of
+        Nothing ->
+          loop show ls (if show then (l:acc) else acc)
+        Just parsedShow ->
+          let newShow =
+                case mode of
+                  CodeExtractFile -> True
+                  CodeExctractPresentation -> parsedShow
+          in loop newShow ls acc
+    parseShowHide (T.stripEnd -> t) = do
+      t <- T.stripPrefix (lc_commentStart lcfg) t
+      t <- T.stripSuffix (fromMaybe "" (lc_commentEnd lcfg)) t
+      case T.strip t of
+        "~~~hide" -> pure False
+        "~~~show" -> pure True
+        _ -> Nothing
+
 data CollectedCode = CollectedCode
-  { cc_code :: T.Text,
+  { cc_code :: Code,
     cc_sectionName :: Maybe T.Text
   }
   deriving (Eq, Show)
@@ -229,8 +261,9 @@ processAllCalls langCfg cfg buildArgs calls = do
     lift $ myWriteFile file (header <> code)
   where
     cmt = lineComment langCfg
+    getCode = extractCode langCfg CodeExtractFile . cc_code
     mkCodeForTagged :: [(Tag, CollectedCode)] -> [(Tag, T.Text)]
-    mkCodeForTagged = map (Data.Bifunctor.second cc_code)
+    mkCodeForTagged = map (Data.Bifunctor.second getCode)
     mkCode :: [ CollectedCode] -> T.Text
     mkCode revCode =
       let groupedBySectionName =
@@ -247,7 +280,7 @@ processAllCalls langCfg cfg buildArgs calls = do
                            in ["", "", cmt line, cmt x, cmt line]
                         Nothing -> []
                     )
-                      ++ map cc_code ccs
+                      ++ map getCode ccs
        in code
     collectCode ::
       M.Map FilePath CollectedCodeFile ->
@@ -262,7 +295,7 @@ processAllCalls langCfg cfg buildArgs calls = do
            in case M.lookup file m of
                 Just ccf -> return $ M.insert file (appendCollectedCode cc place ccf) m
                 Nothing -> return $ M.insert file (mkCollectedCodeFile cc place) m
-    codeFromCall :: PluginCall -> Fail (FilePath, Maybe (CodePlace, T.Text))
+    codeFromCall :: PluginCall -> Fail (FilePath, Maybe (CodePlace, Code))
     codeFromCall call = do
       args <- parseArgs call (lc_extraArgs langCfg)
       let baseFile =
@@ -275,7 +308,7 @@ processAllCalls langCfg cfg buildArgs calls = do
           body =
             maybe "" (\t -> t <> "\n") (ca_prepend args) <>
             (comment (ca_comment args) $ T.stripEnd (pc_body call))
-          code = "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
+          code = Code $ "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
       mCode <-
         case ca_mode args of
           CodeModeShowOnly -> return Nothing

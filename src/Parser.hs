@@ -157,9 +157,7 @@ parseMarkdown file plugins input = do
                   case k of
                     PluginWithoutBody -> do
                       let skipNext =
-                            case mNextLine of
-                              Just t -> isPluginBodyEnd t
-                              Nothing -> False
+                            maybe False isPluginBodyEnd mNextLine
                       return $
                         ctx
                           { pc_revTokens = Plugin call : pc_revTokens ctx,
