@@ -29,6 +29,7 @@ import Utils
 import qualified Data.Set as Set
 import qualified Data.Bifunctor
 import Safe
+import System.Directory
 
 data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
   deriving (Eq, Show)
@@ -206,6 +207,10 @@ appendCollectedCode cc place file =
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
 processAllCalls langCfg cfg buildArgs calls = do
+  let allPlugins = Set.fromList (map pc_pluginName  calls)
+  forM_ allPlugins $ \pluginName -> do
+    let dir = pluginDir cfg pluginName
+    liftIO $ removeDirectoryRecursive dir
   codeMap <- exceptInM $ foldM collectCode M.empty calls
   time <- liftIO getCurrentTime
   let header =
