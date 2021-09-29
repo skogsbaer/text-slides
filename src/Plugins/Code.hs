@@ -210,7 +210,7 @@ processAllCalls langCfg cfg buildArgs calls = do
   time <- liftIO getCurrentTime
   let header =
         cmt
-          ( "Automcally extracted from " <> T.pack (ba_inputFile buildArgs)
+          ( "Automatically extracted from " <> T.pack (ba_inputFile buildArgs)
               <> " on "
               <> showText time
           )
