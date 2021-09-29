@@ -30,10 +30,12 @@ testBuildConfig plugins =
       bc_python = "python3",
       bc_convert = "convert",
       bc_mermaid = "mermaid",
-      bc_beamerHeader = Nothing,
+      bc_beamerHeader = [],
       bc_htmlHeader = Nothing,
       bc_luaFilter = Nothing,
-      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins
+      bc_plugins = M.fromList $ map (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p)) plugins,
+      bc_pdfcrop = "pdfcrop",
+      bc_mermaidConfig = Nothing
     }
 
 testBuildArgs :: BuildArgs
