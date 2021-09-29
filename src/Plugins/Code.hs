@@ -27,6 +27,8 @@ import System.FilePath
 import Types
 import Utils
 import qualified Data.Set as Set
+import qualified Data.Bifunctor
+import Safe
 
 data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
   deriving (Eq, Show)
@@ -40,7 +42,8 @@ data FirstLine = FirstLineImplicit | FirstLineExplicit Int | FirstLineContinue
 data CodePlace = AtStart | Here | AtEnd | Tagged Tag
   deriving (Eq, Show)
 
-newtype Tag = Tag T.Text
+data Tag =
+  Tag { t_kind :: T.Text, t_id :: T.Text }
   deriving (Eq, Show, Ord)
 
 data CodeArgs = CodeArgs
@@ -177,12 +180,12 @@ data CollectedCodeFile = CollectedCodeFile
   { ccf_atStart :: [CollectedCode], -- reversed
     ccf_here :: [CollectedCode], -- reversed
     ccf_atEnd :: [CollectedCode], -- reversed
-    ccf_tagged :: M.Map Tag [CollectedCode] -- reversed
+    ccf_tagged :: [(Tag, CollectedCode)] -- reversed
   }
   deriving (Show)
 
 emptyCollectedCodeFile :: CollectedCodeFile
-emptyCollectedCodeFile = CollectedCodeFile [] [] [] M.empty
+emptyCollectedCodeFile = CollectedCodeFile [] [] [] []
 
 mkCollectedCodeFile :: CollectedCode -> CodePlace -> CollectedCodeFile
 mkCollectedCodeFile cc place =
@@ -190,7 +193,7 @@ mkCollectedCodeFile cc place =
     AtStart -> emptyCollectedCodeFile {ccf_atStart = [cc]}
     Here -> emptyCollectedCodeFile {ccf_here = [cc]}
     AtEnd -> emptyCollectedCodeFile {ccf_atEnd = [cc]}
-    Tagged t -> emptyCollectedCodeFile {ccf_tagged = M.singleton t [cc]}
+    Tagged t -> emptyCollectedCodeFile {ccf_tagged = [(t, cc)]}
 
 appendCollectedCode :: CollectedCode -> CodePlace -> CollectedCodeFile -> CollectedCodeFile
 appendCollectedCode cc place file =
@@ -198,9 +201,7 @@ appendCollectedCode cc place file =
     AtStart -> file {ccf_atStart = cc : ccf_atStart file}
     Here -> file {ccf_here = cc : ccf_here file}
     AtEnd -> file {ccf_atEnd = cc : ccf_atEnd file}
-    Tagged tag -> file {ccf_tagged = insertInMap (ccf_tagged file) tag }
-  where
-    insertInMap m tag = M.insertWith (++) tag [cc] m
+    Tagged tag -> file {ccf_tagged = (tag, cc) : (ccf_tagged file) }
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
@@ -217,15 +218,15 @@ processAllCalls langCfg cfg buildArgs calls = do
     let code =
           mkCode (ccf_atStart ccf) <>
           mkCode (ccf_here ccf) <>
-          lc_mkCodeForTags langCfg (mkCodeMapFromTagMap (ccf_tagged ccf)) <>
+          lc_mkCodeForTags langCfg (mkCodeForTagged (ccf_tagged ccf)) <>
           mkCode (ccf_atEnd ccf)
     lift $ note ("Generating " ++ file)
     lift $ myWriteFile file (header <> code)
   where
     cmt = lineComment langCfg
-    mkCodeMapFromTagMap :: M.Map Tag [CollectedCode] -> M.Map Tag T.Text
-    mkCodeMapFromTagMap = M.map mkCode
-    mkCode :: [CollectedCode] -> T.Text
+    mkCodeForTagged :: [(Tag, CollectedCode)] -> [(Tag, T.Text)]
+    mkCodeForTagged = map (Data.Bifunctor.second cc_code)
+    mkCode :: [ CollectedCode] -> T.Text
     mkCode revCode =
       let groupedBySectionName =
             L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) (reverse revCode)
@@ -292,7 +293,7 @@ data LangConfig = LangConfig
     lc_makeDefaultFilename :: FilePath -> FilePath,
     lc_extraArgs :: [T.Text],
     lc_tagForCall :: PluginCall -> Fail (Maybe Tag),
-    lc_mkCodeForTags :: M.Map Tag T.Text -> T.Text
+    lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text
   }
 
 mkLangConfig :: String -> T.Text -> Maybe T.Text -> LangConfig
@@ -307,6 +308,22 @@ mkLangConfig ext commentStart commentEnd =
     lc_mkCodeForTags = const ""
   }
 
+-- The input list may contain several entries for the same tag, the output list
+-- contains at most one entry for the same tag (the content is concatenated).
+groupByTag :: [(Tag, T.Text)] -> [(Tag, T.Text)]
+groupByTag l =
+  let m = M.fromListWith (\old new -> old <> "\n" <> new) l
+  in loop Set.empty m l []
+  where
+    loop :: Set.Set Tag -> M.Map Tag T.Text -> [(Tag, T.Text)] -> [(Tag, T.Text)] -> [(Tag, T.Text)]
+    loop _ _ [] acc = reverse acc
+    loop handled m ((tag, _) : rest) acc =
+      if tag `Set.member` handled
+        then loop handled m rest acc
+        else loop (Set.insert tag handled) m rest
+               ((tag, (fromJustNote ("expected tag " ++ show tag ++ " in map") $ M.lookup tag m))
+                : acc)
+
 javaLangConfig :: LangConfig
 javaLangConfig = (mkLangConfig ".java" "// " Nothing)
   { lc_makeDefaultFilename = \fp ->
@@ -320,22 +337,31 @@ javaLangConfig = (mkLangConfig ".java" "// " Nothing)
       let loc = pc_location call
           m = pc_args call
       method <- fromMaybe False <$> getOptionalBoolValue loc "method" m
-      body <- fromMaybe False <$> getOptionalBoolValue loc "body" m
+      body <- case M.lookup "body" m of
+        Nothing -> pure Nothing
+        Just (ArgString t) -> pure $ Just (Tag "body"  t)
+        Just (ArgInt i) -> pure $ Just (Tag "body" (showText i))
+        Just (ArgBool True) -> pure $ Just (Tag "body" (hash call))
+        Just (ArgBool False) -> pure Nothing
       case (method, body) of
-        (False, False) -> Right Nothing
-        (True, False) -> Right (Just methodTag)
-        (False, True) -> Right (Just bodyTag)
-        (True, True) -> Left (unLocation loc <> ": cannot set method and body both to true"),
-    lc_mkCodeForTags = \m ->
-      let methodCode = fromMaybe "" $ M.lookup methodTag m
-          bodyCode = fromMaybe "" $ M.lookup bodyTag m
-      in "class __CodeContainer {\n" <> methodCode <>
-         "\n  public static void __codeContainer() throws Exception {\n" <> bodyCode <>
-         "\n  }\n}"
+        (False, _) -> Right body
+        (True, Nothing) -> Right (Just (methodTag (hash call)))
+        (True, Just _) -> Left (unLocation loc <> ": cannot set method and body"),
+    lc_mkCodeForTags = \m' ->
+      let m = groupByTag m'
+          methods = map snd $ filter (\(t, _) -> t_kind t == "method") m
+          bodies = map (Data.Bifunctor.first t_id) $ filter (\(t, _) -> t_kind t == "body") m
+          methodsForBodies = flip map bodies $ \(id, code) ->
+            "public static void __body_" <> id <> "() throws Exception {\n" <> code <> "\n}"
+          allMethods = methods ++ methodsForBodies
+      in if null allMethods
+            then ""
+            else let code = T.concat (L.intersperse "\n\n" allMethods)
+                 in "class __CodeContainer {\n" <> code <> "\n}"
   }
   where
     methodTag = Tag "method"
-    bodyTag = Tag "body"
+    hash c = unHash (md5OfText (unLocation (pc_location c)))
 
 lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
