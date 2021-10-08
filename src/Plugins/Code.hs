@@ -29,7 +29,7 @@ import Utils
 import qualified Data.Set as Set
 import qualified Data.Bifunctor
 import Safe
-import System.Directory
+import Control.Exception
 
 data CodeMode = CodeModeShow | CodeModeHide | CodeModeShowOnly
   deriving (Eq, Show)
@@ -242,14 +242,14 @@ processAllCalls langCfg cfg buildArgs calls = do
   let allPlugins = Set.fromList (map pc_pluginName  calls)
   forM_ allPlugins $ \pluginName -> do
     let dir = pluginDir cfg pluginName
-    liftIO $ removeDirectoryRecursive dir
+    liftIO $ removeAllFilesInDirectory dir `catch` (\(_::IOError) -> pure ())
   codeMap <- exceptInM $ foldM collectCode M.empty calls
   time <- liftIO getCurrentTime
   let header =
         cmt
           ( "Automatically extracted from " <> T.pack (ba_inputFile buildArgs)
               <> " on "
-              <> showText time
+              <> showText time <> "\n\n"
           )
   forM_ (M.toList codeMap) $ \(file, ccf) -> do
     let code =
@@ -378,7 +378,7 @@ javaLangConfig = (mkLangConfig ".java" "// " Nothing)
             case c of
               '-' -> '_'
               _ -> c
-      in takeDirectory fp </> "Class_" ++ map replace (takeFileName fp),
+      in takeDirectory fp </> "__Class_" ++ map replace (takeFileName fp),
     lc_extraArgs = ["method", "body"],
     lc_tagForCall = \call -> do
       let loc = pc_location call

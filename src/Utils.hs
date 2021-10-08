@@ -20,6 +20,7 @@ import System.IO
 import System.Process
 import Text.Printf
 import Data.Maybe
+import Control.Monad (forM_)
 
 withTiming :: MonadIO m => m a -> m (Double, a)
 withTiming action = do
@@ -161,3 +162,10 @@ markdownImage path (width, height) center =
           True -> "![center]"
           False -> "![]"
   in prefix <> "(" <> T.pack path <> ")" <> dimensions
+
+removeAllFilesInDirectory :: FilePath -> IO ()
+removeAllFilesInDirectory path = do
+  cs <- map (path </>) <$> (listDirectory path `catch` (\(_::IOError) -> pure []))
+  forM_ cs $ \p -> do
+    isDir <- System.Directory.doesDirectoryExist p
+    if isDir then removeDirectoryRecursive p else removeFile p
