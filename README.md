@@ -116,6 +116,22 @@ the code snippet at the beginning of the code file.
 * `comment` (optional bool): if `true` (the default being `false`), the code is exported
 as a comment to the file.
 
+If `mode` is `"show"` (the default), certain parts of the code can be hidden from the
+presentation. This can be done by writing the following line somewhere in your code:
+
+```
+# ~~~hide
+```
+
+All code from this line on is now hidden in the presentation. To show code again, use the
+following line:
+
+```
+# ~~~show
+```
+
+(Clearly, the comment character may vary for you language.)
+
 #### Example
 
 ```
