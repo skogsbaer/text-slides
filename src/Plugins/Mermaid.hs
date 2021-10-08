@@ -90,8 +90,8 @@ runMermaid cfg _buildArgs pdfFile = do
       let mermaidArgs =
             map T.unpack (mc_args mermaidCall)
               ++ ["--input", mddFile, "--output", tmpPdf, "--scale", "8"]
-      mySystem INFO (bc_mermaid cfg) mermaidArgs Nothing
-      mySystem INFO (bc_pdfcrop cfg) [tmpPdf, pdfFile] Nothing
+      mySystem INFO DontPrintStdout (bc_mermaid cfg) mermaidArgs Nothing
+      mySystem INFO DontPrintStdout (bc_pdfcrop cfg) [tmpPdf, pdfFile] Nothing
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()
 pluginRules cfg args = do

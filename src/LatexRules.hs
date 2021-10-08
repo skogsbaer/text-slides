@@ -139,6 +139,7 @@ genPdf cfg pdf = do
       navBefore <- if navExists then liftIO $ BS.readFile navFile else return BS.empty
       mySystem
         INFO
+        DontPrintStdout
         (bc_pdflatex cfg)
         [ "-halt-on-error",
           "-interaction",
@@ -217,13 +218,14 @@ genFmt cfg fmt = do
   let texPreamble = fmt -<.> texPreambleExt
   preamble <- myReadFile texPreamble
   if preamble == ""
-    then mySystem INFO "touch" [fmt] Nothing
+    then mySystem INFO DontPrintStdout "touch" [fmt] Nothing
     else do
       let jobname = takeBaseName fmt
       env <- liftIO $ mkLatexEnv cfg
       note ("Generating " ++ fmt)
       mySystem
         INFO
+        DontPrintStdout
         (bc_pdflatex cfg)
         [ "-ini",
           "-interaction",

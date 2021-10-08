@@ -111,7 +111,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
       PandocModeLatex -> latexArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
-  mySystem INFO (bc_pandoc cfg) pandocArgs Nothing
+  mySystem INFO DontPrintStdout  (bc_pandoc cfg) pandocArgs Nothing
   where
     needIfSet (Just x) = need [x]
     needIfSet Nothing = return ()
@@ -204,7 +204,7 @@ generateJson :: BuildConfig -> FilePath -> FilePath -> Action ()
 generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
   need [inFile]
   note $ "Generating " ++ outFile
-  mySystem INFO (bc_pandoc cfg) ["--from=markdown", "--output=" ++ outFile, inFile] Nothing
+  mySystem INFO DontPrintStdout (bc_pandoc cfg) ["--from=markdown", "--output=" ++ outFile, inFile] Nothing
 
 coreRules :: BuildConfig -> BuildArgs -> Rules ()
 coreRules cfg args = do

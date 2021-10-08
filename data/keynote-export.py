@@ -45,6 +45,17 @@ def run_or_fail(cmd):
         print(f'{cmd} failed with exit code {ecode}')
         sys.exit(ecode)
 
+def crop(pdf):
+    old = pdf + '-old'
+    cropped = os.path.splitext(pdf)[0] + '-crop.pdf'
+    if os.path.isfile(old) and os.path.isfile(cropped):
+        ecode = os.WEXITSTATUS(os.system(f'diff-pdf {old} {pdf}'))
+        if ecode == 0:
+            print(f'{pdf} unchanged and {cropped} exists, no need to crop')
+            return
+    run_or_fail(f'cd {os.path.dirname(pdf)}; pdfcrop {os.path.basename(pdf)}')
+
+
 def main():
     ap = ArgumentParser()
     ap.add_argument('-k', '--keynote', help="Path to the keynote to convert",
@@ -60,10 +71,11 @@ def main():
     pdf = os.path.join(d, "out.pdf")
     outpath = appscript.mactypes.File(pdf)
     export_keynote(args.keynote, outpath, opts.skip_builds)
+    for pdf in [x for x in os.listdir(d) if re.match(r'slides_\d+\.pdf$', x)]:
+        run_or_fail(f'cp {d}/{pdf} {d}/{pdf + "-old"}')
     run_or_fail(f'cd {d} && pdftk out.pdf burst output slides_%03d.pdf')
-    pdfs = [x for x in os.listdir(d) if re.match(r'slides_\d+\.pdf', x)]
-    for pdf in pdfs:
-        run_or_fail(f'cd {d}; pdfcrop {pdf}')
+    for pdf in [x for x in os.listdir(d) if re.match(r'slides_\d+\.pdf$', x)]:
+        crop(os.path.join(d, pdf))
 
 if __name__ == '__main__':
     main()

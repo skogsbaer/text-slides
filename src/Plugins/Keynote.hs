@@ -130,7 +130,7 @@ runKeynoteExport cfg hashFile = do
   note ("Exporting PDFs from " ++ keyFile)
   hash <- needWithHash keyFile
   let exportArgs = [script, "-k", keyFile, "-o", outDir]
-  mySystem INFO (bc_python cfg) exportArgs Nothing
+  mySystem INFO PrintStdout (bc_python cfg) exportArgs Nothing
   myWriteFile hashFile (unHash hash)
 
 pluginRules :: BuildConfig -> BuildArgs -> Rules ()

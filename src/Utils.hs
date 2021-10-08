@@ -47,8 +47,10 @@ withDevNull action = do
 
 type Env = M.Map T.Text T.Text
 
-mySystem :: LogLevel -> FilePath -> [String] -> Maybe Env -> Action ()
-mySystem ll prog args mEnv = do
+data ProgOutput = PrintStdout | DontPrintStdout
+
+mySystem :: LogLevel -> ProgOutput -> FilePath -> [String] -> Maybe Env -> Action ()
+mySystem ll output prog args mEnv = do
   let cmd = unwords $ prog : args
   liftIO $ doLog ll cmd
   (secs, res) <-
@@ -56,7 +58,11 @@ mySystem ll prog args mEnv = do
       traced (takeBaseName prog) $
         withDevNull $ \devNull -> do
           let myEnv = flip fmap mEnv $ \m -> map (bimap T.unpack T.unpack) $ M.toList m
-              process = (proc prog args) {std_out = UseHandle devNull, env = myEnv}
+              process =
+                let p = (proc prog args) {env = myEnv}
+                in case output of
+                     PrintStdout -> p
+                     DontPrintStdout -> p {std_out = UseHandle devNull}
           (_, _, _, p) <- createProcess process
           waitForProcess p
   case res of
