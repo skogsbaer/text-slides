@@ -11,7 +11,7 @@ simply places to same content in the markdown file. The p_forAllCalls action (in
 generating the main output document) then writes to code snippets into the appropriate
 files.
 -}
-module Plugins.Code (codePlugins, LangConfig (..), mkLangConfig) where
+module Plugins.Code (codePlugins, LangConfig (..), mkLangConfig, ExternalLangConfig(..)) where
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -334,6 +334,15 @@ data LangConfig = LangConfig
     lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text
   }
 
+data ExternalLangConfig = ExternalLangConfig
+  { elc_name :: T.Text,
+    elc_fileExt :: String,
+    elc_commentStart :: T.Text,
+    elc_commentEnd :: Maybe T.Text,
+    elc_syntaxFile :: Maybe FilePath
+  }
+  deriving (Show, Eq)
+
 mkLangConfig :: String -> T.Text -> Maybe T.Text -> LangConfig
 mkLangConfig ext commentStart commentEnd =
   LangConfig
@@ -404,12 +413,36 @@ javaLangConfig = (mkLangConfig ".java" "// " Nothing)
 lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
 
-codePlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
-codePlugins moreLangs =
-  flip map (filter (\(k, _) -> not (k `Set.member` custom)) languages ++ moreLangs) $ \(name, langCfg) ->
-  AnyPluginConfig $ mkCodePlugin (PluginName name) langCfg
+codePlugins :: [ExternalLangConfig] -> [AnyPluginConfig Action]
+codePlugins externalLangs =
+  let languages =
+        map languageFromExternal onlyExternalLangs ++
+        map combineLanguage langPairs ++
+        onlyInternalLangs
+  in flip map languages $ \(name, langCfg) ->
+      AnyPluginConfig $ mkCodePlugin (PluginName name) langCfg
   where
-    custom = Set.fromList (map fst moreLangs)
+    langPairs =
+      flip mapMaybe externalLangs $ \ext -> do
+        int <- L.lookup (elc_name ext) languages
+        pure (ext, int)
+    onlyExternalLangs =
+      flip filter externalLangs $ \ext -> isNothing  (L.lookup (elc_name ext) languages)
+    onlyInternalLangs =
+      flip filter languages $ \(name, _) ->
+        not (any (\ext -> elc_name ext == name) externalLangs)
+    combineLanguage (ext, cfg) =
+      ( elc_name ext,
+        cfg
+        { lc_fileExt = elc_fileExt ext
+        , lc_commentStart = elc_commentStart ext
+        , lc_commentEnd = elc_commentEnd ext
+        }
+      )
+    languageFromExternal cfg =
+      ( elc_name cfg,
+        mkLangConfig (elc_fileExt cfg) (elc_commentStart cfg) (elc_commentEnd cfg)
+      )
 
 languages :: [(T.Text, LangConfig)]
 languages =

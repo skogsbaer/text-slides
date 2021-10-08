@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-
+{-# OPTIONS_GHC -Wno-orphans #-}
 module BuildConfig
   ( getBuildConfig,
     ExternalLangConfig (..),
@@ -27,7 +27,7 @@ import System.FilePath
 import Types
 import Utils
 
-allPlugins :: [(T.Text, LangConfig)] -> [AnyPluginConfig Action]
+allPlugins :: [ExternalLangConfig] -> [AnyPluginConfig Action]
 allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
 
 getHomeCfgDir :: IO FilePath
@@ -99,7 +99,7 @@ getBuildConfig opts = do
               M.fromList $
                 map
                   (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
-                  (allPlugins (map languageFromExternal externalCfgs)),
+                  (allPlugins externalCfgs),
             bc_syntaxDefFiles = V.fromList $ mapMaybe elc_syntaxFile externalCfgs
           }
       args =
@@ -128,19 +128,6 @@ getBuildConfig opts = do
         b <- doesFileExist cand
         return $ if b then Just cand else Nothing
       return $ catMaybes (results ++ [mCmdLine])
-    languageFromExternal cfg =
-      ( elc_name cfg,
-        mkLangConfig (elc_fileExt cfg) (elc_commentStart cfg) (elc_commentEnd cfg)
-      )
-
-data ExternalLangConfig = ExternalLangConfig
-  { elc_name :: T.Text,
-    elc_fileExt :: String,
-    elc_commentStart :: T.Text,
-    elc_commentEnd :: Maybe T.Text,
-    elc_syntaxFile :: Maybe FilePath
-  }
-  deriving (Show, Eq)
 
 newtype ExternalLangConfigs = ExternalLangConfigs {unExternalLangConfigs :: V.Vector ExternalLangConfig}
   deriving (Show, Eq)
