@@ -1,6 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module CoreRules
   ( coreRules,
@@ -70,7 +70,7 @@ data PandocMode = PandocModeHtml | PandocModeLatex
 runPandoc :: GenericBuildConfig m -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
 runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
   need [inFile]
-  deps <- fmap (map (\f -> bc_buildDir  cfg </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
+  deps <- fmap (map (\f -> bc_buildDir cfg </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
   writeDeps outFile deps
   syntaxDefs <-
     forM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
@@ -111,7 +111,7 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
       PandocModeLatex -> latexArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
-  mySystem INFO DontPrintStdout  (bc_pandoc cfg) pandocArgs Nothing
+  mySystem INFO DontPrintStdout (bc_pandoc cfg) pandocArgs Nothing
   where
     needIfSet (Just x) = need [x]
     needIfSet Nothing = return ()
@@ -193,10 +193,10 @@ generateRawMarkdown cfg args inFile outFile = do
     case res of
       Left err ->
         warn
-        ( "Processing all calls of plugin " ++ T.unpack (unPluginName pluginName)
-            ++ " failed: "
-            ++ T.unpack err
-        )
+          ( "Processing all calls of plugin " ++ T.unpack (unPluginName pluginName)
+              ++ " failed: "
+              ++ T.unpack err
+          )
       Right () -> return ()
   myWriteFile outFile rawMd
 
@@ -233,8 +233,8 @@ coreRules cfg args = do
       copyFileChanged (outputFileToInputFile cfg args out) out
     isImage f = takeExtension f `elem` [".jpg", ".jpeg", ".png"]
     isStaticPdf f =
-      takeExtension f == ".pdf" &&
-      takeBaseName (ba_inputFile args) /= takeBaseName f
+      takeExtension f == ".pdf"
+        && takeBaseName (ba_inputFile args) /= takeBaseName f
 
 mdRawExt :: String
 mdRawExt = ".mdraw"
