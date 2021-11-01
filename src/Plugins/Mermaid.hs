@@ -29,7 +29,7 @@ import Development.Shake
 import Development.Shake.FilePath
 import GHC.Generics
 import Logging
-import System.Directory
+import System.Directory hiding (doesFileExist)
 import Types
 import Utils
 
@@ -83,13 +83,20 @@ runMermaid cfg _buildArgs pdfFile = do
         )
     Just mermaidCall -> withTempDir $ \dir -> do
       let tmpPdf = dir </> "mermaid.pdf"
+      cfgOpts <-
+        case bc_mermaidConfig cfg of
+          Nothing -> pure []
+          Just f -> do
+            b <- doesFileExist f
+            pure $ if b then ["-c", f] else []
       note
         ( "Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall) ++ " to produce "
             ++ pdfFile
         )
       let mermaidArgs =
             map T.unpack (mc_args mermaidCall)
-              ++ ["--input", mddFile, "--output", tmpPdf, "--scale", "8"]
+              ++ cfgOpts ++
+              ["--input", mddFile, "--output", tmpPdf, "--scale", "8"]
       mySystem INFO DontPrintStdout (bc_mermaid cfg) mermaidArgs Nothing
       mySystem INFO DontPrintStdout (bc_pdfcrop cfg) [tmpPdf, pdfFile] Nothing
 
