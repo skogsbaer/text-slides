@@ -39,8 +39,7 @@ someSymbolP = do
 pluginCallPrefixP :: Parser PluginName
 pluginCallPrefixP = do
   symbolP "~~~"
-  name <- someSymbolP
-  return (PluginName name)
+  PluginName <$> someSymbolP
 
 getPluginName :: T.Text -> Maybe PluginName
 getPluginName line =
@@ -194,6 +193,4 @@ parseSectionName t =
     removeShrink :: T.Text -> T.Text
     removeShrink t =
       let t1 = T.stripEnd t
-       in case T.stripSuffix "{.shrink}" t1 of
-            Just x -> T.stripEnd x
-            Nothing -> t1
+       in maybe t1 T.stripEnd (T.stripSuffix "{.shrink}" t1)

@@ -54,7 +54,8 @@ data CodeArgs = CodeArgs
     ca_firstLine :: FirstLine,
     ca_place :: CodePlace,
     ca_comment :: Bool,
-    ca_prepend :: Maybe T.Text
+    ca_prepend :: Maybe T.Text,
+    ca_rewrite :: Rewrite
   }
 
 parseArgs :: PluginCall -> [T.Text] -> Fail CodeArgs
@@ -62,6 +63,7 @@ parseArgs call extraArgs = do
   file <- getOptionalStringValue loc "file" m
   modeStr <- getOptionalEnumValue loc "mode" ["show", "hide", "showOnly"] m
   lineNumStr <- getOptionalEnumValue loc "lineNumbers" ["on", "off", "auto"] m
+  rewriteBool <- getOptionalBoolValue  loc "rewrite" m
   placeStr <- getOptionalEnumValue loc "place" ["atStart", "here", "atEnd"] m
   comment <- fromMaybe False <$> getOptionalBoolValue loc "comment" m
   prepend <- getOptionalStringValue loc "prepend" m
@@ -79,6 +81,11 @@ parseArgs call extraArgs = do
       Just "auto" -> return LineNumbersAuto
       Nothing -> return LineNumbersAuto
       Just x -> error $ "uncovered case: " ++ show x
+  rewrite <-
+    case rewriteBool of
+      Just True -> return DoRewrite
+      Just False -> return NoRewrite
+      Nothing -> return NoRewrite
   place <-
     case placeStr of
       Just "atStart" -> return AtStart
@@ -92,7 +99,8 @@ parseArgs call extraArgs = do
       _ -> Nothing
   let firstLine = fromMaybe FirstLineImplicit firstLineM
   checkForSpuriousArgs loc m
-      (["file", "mode", "lineNumbers", "firstLine", "place", "comment", "prepend"] ++ extraArgs)
+      (["file", "mode", "lineNumbers", "firstLine", "place", "comment", "prepend", "rewrite"]
+       ++ extraArgs)
   return $
     CodeArgs
       { ca_file = fmap T.unpack file,
@@ -101,7 +109,8 @@ parseArgs call extraArgs = do
         ca_firstLine = firstLine,
         ca_place = place,
         ca_comment = comment,
-        ca_prepend = prepend
+        ca_prepend = prepend,
+        ca_rewrite = rewrite
       }
   where
     loc = pc_location call
@@ -146,7 +155,7 @@ runPlugin langCfg _cfg _buildArgs state call = do
           FirstLineImplicit -> 1
           FirstLineExplicit i -> i
           FirstLineContinue -> cs_nextLineNumber state
-      body = extractCode langCfg CodeExctractPresentation (Code (pc_body call))
+      body = extractCode langCfg CodeExctractPresentation (Code (ca_rewrite args) (pc_body call))
       nextState =
         CodeState
           { cs_nextLineNumber =
@@ -171,15 +180,24 @@ runPlugin langCfg _cfg _buildArgs state call = do
           CodeModeHide -> ""
   return (result, nextState)
 
+data Rewrite
+  = DoRewrite
+  | NoRewrite
+  deriving (Eq, Show)
+
 -- The text wrapped in the Code newtype may contain directives
 -- such as `# ~~~hide`.
-newtype Code = Code T.Text
+data Code =
+  Code
+  { c_rewrite :: Rewrite
+  , c_payload :: T.Text
+  }
   deriving (Eq, Show)
 
 data CodeExtract = CodeExtractFile | CodeExctractPresentation
 
 extractCode :: LangConfig -> CodeExtract -> Code -> T.Text
-extractCode lcfg mode (Code t) =
+extractCode lcfg mode (Code doRewrite t) =
   let lines = T.lines t
       newLines = loop True lines []
   in T.unlines newLines
@@ -188,7 +206,7 @@ extractCode lcfg mode (Code t) =
     loop show (l:ls) acc =
       case parseShowHide l of
         Nothing ->
-          loop show ls (if show then (l:acc) else acc)
+          loop show ls (if show then (rewriteCodeLine lcfg mode doRewrite l : acc) else acc)
         Just parsedShow ->
           let newShow =
                 case mode of
@@ -202,6 +220,13 @@ extractCode lcfg mode (Code t) =
         "~~~hide" -> pure False
         "~~~show" -> pure True
         _ -> Nothing
+
+rewriteCodeLine :: LangConfig -> CodeExtract -> Rewrite -> T.Text -> T.Text
+rewriteCodeLine lcfg mode doRewrite line =
+  case (mode, doRewrite) of
+    (CodeExctractPresentation, _) -> line
+    (CodeExtractFile, NoRewrite) -> line
+    (CodeExtractFile, DoRewrite) -> lc_rewriteLine lcfg line
 
 data CollectedCode = CollectedCode
   { cc_code :: Code,
@@ -264,7 +289,7 @@ processAllCalls langCfg cfg buildArgs calls = do
     getCode = extractCode langCfg CodeExtractFile . cc_code
     mkCodeForTagged :: [(Tag, CollectedCode)] -> [(Tag, T.Text)]
     mkCodeForTagged = map (Data.Bifunctor.second getCode)
-    mkCode :: [ CollectedCode] -> T.Text
+    mkCode :: [CollectedCode] -> T.Text
     mkCode revCode =
       let groupedBySectionName =
             L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) (reverse revCode)
@@ -308,7 +333,9 @@ processAllCalls langCfg cfg buildArgs calls = do
           body =
             maybe "" (\t -> t <> "\n") (ca_prepend args) <>
             (comment (ca_comment args) $ T.stripEnd (pc_body call))
-          code = Code $ "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
+          code =
+            Code (ca_rewrite args) $
+              "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
       mCode <-
         case ca_mode args of
           CodeModeShowOnly -> return Nothing
@@ -331,7 +358,8 @@ data LangConfig = LangConfig
     lc_makeDefaultFilename :: FilePath -> FilePath,
     lc_extraArgs :: [T.Text],
     lc_tagForCall :: PluginCall -> Fail (Maybe Tag),
-    lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text
+    lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text,
+    lc_rewriteLine :: T.Text -> T.Text
   }
 
 data ExternalLangConfig = ExternalLangConfig
@@ -352,7 +380,8 @@ mkLangConfig ext commentStart commentEnd =
     lc_makeDefaultFilename = id,
     lc_extraArgs = [],
     lc_tagForCall = const (Right Nothing),
-    lc_mkCodeForTags = const ""
+    lc_mkCodeForTags = const "",
+    lc_rewriteLine = id
   }
 
 -- The input list may contain several entries for the same tag, the output list
@@ -378,37 +407,81 @@ javaLangConfig = (mkLangConfig ".java" "// " Nothing)
             case c of
               '-' -> '_'
               _ -> c
-      in takeDirectory fp </> "__Class_" ++ map replace (takeFileName fp),
-    lc_extraArgs = ["method", "body"],
-    lc_tagForCall = \call -> do
+      in takeDirectory fp </> "__Class_" ++ map replace (takeFileName fp)
+  , lc_extraArgs = ["method", "body", "static", "test"]
+  , lc_tagForCall = \call -> do
       let loc = pc_location call
           m = pc_args call
       method <- fromMaybe False <$> getOptionalBoolValue loc "method" m
-      body <- case M.lookup "body" m of
-        Nothing -> pure Nothing
-        Just (ArgString t) -> pure $ Just (Tag "body"  t)
-        Just (ArgInt i) -> pure $ Just (Tag "body" (showText i))
-        Just (ArgBool True) -> pure $ Just (Tag "body" (hash call))
-        Just (ArgBool False) -> pure Nothing
-      case (method, body) of
-        (False, _) -> Right body
-        (True, Nothing) -> Right (Just (methodTag (hash call)))
-        (True, Just _) -> Left (unLocation loc <> ": cannot set method and body"),
-    lc_mkCodeForTags = \m' ->
+      body <- tagForArg "body" m call
+      test <- tagForArg "test" m call
+      let onlyOne = Left (unLocation loc <> ": at most one of method, body, and test allowed")
+      case (method, body, test) of
+        (False, Just body, Nothing) -> Right (Just body)
+        (False, Nothing, Just test) -> Right (Just test)
+        (True, Nothing, Nothing) -> Right (Just (methodTag (hash call)))
+        (False, Nothing, Nothing) -> Right Nothing
+        (True, _, Just _) -> onlyOne
+        (True, Just _, _) -> onlyOne
+        (_, Just _, Just _) -> onlyOne
+  , lc_mkCodeForTags = \m' ->
       let m = groupByTag m'
           methods = map snd $ filter (\(t, _) -> t_kind t == "method") m
-          bodies = map (Data.Bifunctor.first t_id) $ filter (\(t, _) -> t_kind t == "body") m
+          bodiesOrTests k = map (Data.Bifunctor.first t_id) $ filter (\(t, _) -> t_kind t == k) m
+          bodies = bodiesOrTests "body"
+          tests = bodiesOrTests "test"
           methodsForBodies = flip map bodies $ \(id, code) ->
             "public static void __body_" <> id <> "() throws Exception {\n" <> code <> "\n}"
-          allMethods = methods ++ methodsForBodies
+          methodsForTests = flip map tests $ \(id, code) ->
+            "@Test public void __body_" <> id <> "() throws Exception {\n" <> code <> "\n}"
+          allMethods = methods ++ methodsForBodies ++ methodsForTests
       in if null allMethods
             then ""
             else let code = T.concat (L.intersperse "\n\n" allMethods)
                  in "class __CodeContainer {\n" <> code <> "\n}"
+  , lc_rewriteLine = rewrite
   }
   where
     methodTag = Tag "method"
     hash c = unHash (md5OfText (unLocation (pc_location c)))
+    tagForArg arg m call = do
+      case M.lookup arg m of
+        Nothing -> pure Nothing
+        Just (ArgString t) -> pure $ Just (Tag arg t)
+        Just (ArgInt i) -> pure $ Just (Tag arg (showText i))
+        Just (ArgBool True) -> pure $ Just (Tag arg (hash call))
+        Just (ArgBool False) -> pure Nothing
+    methodReturnType line =
+      let ws = T.words (T.strip line)
+          isKw x = x `elem` ["public", "private", "protected", "final", "abstract", "static"]
+      in case filter (not . isKw) ws of
+           [] -> Nothing
+           l ->
+             case T.words (T.pack (dropTyArgs 0 (T.unpack (T.unwords l)))) of
+               [] -> Nothing
+               (x:_) -> Just x
+    dropTyArgs i ('<':rest) = dropTyArgs (i+1) rest
+    dropTyArgs i ('>':rest) = dropTyArgs (i-1) rest
+    dropTyArgs 0 s = s
+    dropTyArgs i (_:rest) = dropTyArgs i rest
+    dropTyArgs _ [] = []
+    rewrite line =
+      case methodReturnType line of
+        Nothing -> line
+        Just ty ->
+          let repl =
+                case ty of
+                  "void" -> "{ }"
+                  "boolean" -> "{ return false; }"
+                  "int" -> "{ return 0; }"
+                  "short" -> "{ return 0; }"
+                  "byte" -> "{ return 0; }"
+                  "long" -> "{ return 0L; }"
+                  "double" -> "{ return 0.0; }"
+                  "float" -> "{ return 0.0f; }"
+                  "char" -> "{ return '\\0'; }"
+                  _ -> "{ return null; }"
+          in T.replace "{ ... }" repl (T.replace "{...}" repl line)
 
 lineComment :: LangConfig -> T.Text -> T.Text
 lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)

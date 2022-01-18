@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: aec402ab16be04c39662efa402aae0d5a723a8f5ddaf570c85e81b7011fb7dae
+-- hash: 1df39a4fcb7545177087b774bad1b45276fdaf2428cd3358ddbf3c94a5d43260
 
 name:           text-slides
 version:        0.1
@@ -48,7 +48,22 @@ library
       Paths_text_slides
   hs-source-dirs:
       src
-  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  default-extensions:
+      DeriveDataTypeable
+      DeriveFoldable
+      DeriveFunctor
+      DeriveGeneric
+      DeriveTraversable
+      DerivingStrategies
+      DoAndIfThenElse
+      EmptyDataDecls
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      OverloadedStrings
+      ScopedTypeVariables
+      StandaloneDeriving
+      TypeOperators
+      ViewPatterns
   ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -fwarn-incomplete-patterns
   build-depends:
       QuickCheck
@@ -84,7 +99,22 @@ executable text-slides
       Paths_text_slides
   hs-source-dirs:
       app
-  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  default-extensions:
+      DeriveDataTypeable
+      DeriveFoldable
+      DeriveFunctor
+      DeriveGeneric
+      DeriveTraversable
+      DerivingStrategies
+      DoAndIfThenElse
+      EmptyDataDecls
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      OverloadedStrings
+      ScopedTypeVariables
+      StandaloneDeriving
+      TypeOperators
+      ViewPatterns
   ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -fwarn-incomplete-patterns -rtsopts
   build-depends:
       base
@@ -102,7 +132,22 @@ test-suite unit-tests
       Paths_text_slides
   hs-source-dirs:
       test
-  default-extensions: DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DerivingStrategies DoAndIfThenElse EmptyDataDecls FlexibleContexts GeneralizedNewtypeDeriving OverloadedStrings ScopedTypeVariables StandaloneDeriving TypeOperators ViewPatterns
+  default-extensions:
+      DeriveDataTypeable
+      DeriveFoldable
+      DeriveFunctor
+      DeriveGeneric
+      DeriveTraversable
+      DerivingStrategies
+      DoAndIfThenElse
+      EmptyDataDecls
+      FlexibleContexts
+      GeneralizedNewtypeDeriving
+      OverloadedStrings
+      ScopedTypeVariables
+      StandaloneDeriving
+      TypeOperators
+      ViewPatterns
   ghc-options: -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind -fwarn-missing-signatures -fno-warn-partial-type-signatures -Wredundant-constraints -fwarn-incomplete-patterns -rtsopts
   build-tool-depends:
       HTF:HTF
