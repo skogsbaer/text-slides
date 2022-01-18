@@ -11,6 +11,7 @@ import {-@ HTF_TESTS @-} Test.Keynote
 import {-@ HTF_TESTS @-} Test.Parser
 import {-@ HTF_TESTS @-} Test.TestBuildConfig
 import {-@ HTF_TESTS @-} Test.Transform
+import {-@ HTF_TESTS @-} Test.Vars
 
 main :: IO ()
 main = htfMain htf_importedTests

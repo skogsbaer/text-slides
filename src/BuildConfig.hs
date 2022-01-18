@@ -58,6 +58,10 @@ getBuildConfig opts = do
   unless exists $ do
     putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
     exitWith (ExitFailure 1)
+  varsFile <- do
+    let f = inputFile <.> ".yaml"
+    b <- Development.Shake.doesFileExist f
+    pure $ if b then Just f else Nothing
   let searchDir = takeDirectory inputFile
       searchFile = searchFile' searchDir
       searchFiles = searchFiles' searchDir
@@ -105,6 +109,7 @@ getBuildConfig opts = do
       args =
         BuildArgs
           { ba_inputFile = inputFile,
+            ba_varsFile = varsFile,
             ba_searchDir = searchDir,
             ba_verbose = co_verbose opts
           }

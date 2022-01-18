@@ -27,6 +27,7 @@ import RuleUtils
 import System.FilePath
 import Types
 import Utils
+import Vars
 
 getDependenciesFromPandocJson :: FilePath -> IO [FilePath]
 getDependenciesFromPandocJson inFile = do
@@ -38,7 +39,7 @@ getDependenciesFromPandocJson inFile = do
   return (S.toList deps)
   where
     -- We parse the JSON explicitly instead of relying on pandoc-types.
-    -- Reason: pandoc-types must must the version of the pandoc binary installed
+    -- Reason: pandoc-types must match the version of the pandoc binary installed
     -- on your system
     extractDeps :: J.Value -> S.Set FilePath -> S.Set FilePath
     extractDeps val acc =
@@ -179,7 +180,12 @@ transformMarkdown warnFun cfg buildArgs inFile md = do
 
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
-  md <- myReadFile inFile
+  md' <- myReadFile inFile
+  md <- case ba_varsFile args of
+    Nothing -> pure md'
+    Just f -> do
+      vars <- readVarsFile f
+      pure (expandVars vars md')
   (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args inFile md
   let callMap = foldr (\call m -> M.insertWith (++) (pc_pluginName call) [call] m) M.empty calls
   forM_ (M.toList callMap) $ \(pluginName, calls) -> do

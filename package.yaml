@@ -43,6 +43,7 @@ library:
     - unordered-containers
     - unix
     - vector
+    - yaml
   ghc-options:
     - -Werror -W -fwarn-unused-imports -fwarn-unused-binds -fwarn-orphans
     - -fwarn-unused-matches -fwarn-unused-do-bind -fwarn-wrong-do-bind

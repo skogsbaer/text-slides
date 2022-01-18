@@ -90,10 +90,18 @@ myReadFile fp =
 
 myReadFileIfExists :: FilePath -> Action (Maybe T.Text)
 myReadFileIfExists fp = do
+  myReadFileIfExistsGen fp myReadFile
+
+myReadFileBsIfExists :: FilePath -> Action (Maybe BS.ByteString)
+myReadFileBsIfExists fp = do
+  myReadFileIfExistsGen fp myReadFileBs
+
+myReadFileIfExistsGen :: FilePath -> (FilePath -> Action a) -> Action (Maybe a)
+myReadFileIfExistsGen fp action = do
   ex <- Development.Shake.doesFileExist fp
   if ex
     then do
-      t <- myReadFile fp
+      t <- action fp
       return (Just t)
     else do
       dir <- liftIO getCurrentDirectory

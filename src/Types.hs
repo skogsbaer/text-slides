@@ -55,6 +55,7 @@ allOutputModes = S.fromList [minBound .. maxBound]
 
 data BuildArgs = BuildArgs
   { ba_inputFile :: FilePath,
+    ba_varsFile :: Maybe FilePath,
     ba_verbose :: Bool,
     ba_searchDir :: FilePath
   }

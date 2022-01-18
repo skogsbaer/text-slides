@@ -39,7 +39,8 @@ testBuildConfig plugins =
     }
 
 testBuildArgs :: BuildArgs
-testBuildArgs = BuildArgs {ba_inputFile = "sample.md", ba_verbose = False, ba_searchDir = "."}
+testBuildArgs = BuildArgs {ba_inputFile = "sample.md", ba_varsFile = Nothing,
+                           ba_verbose = False, ba_searchDir = "."}
 
 test_parseExternalLangConfig :: IO ()
 test_parseExternalLangConfig = do
