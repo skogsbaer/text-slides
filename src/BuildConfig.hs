@@ -85,8 +85,7 @@ computeBuildConfig opts args = do
   info ("External code plugins: " ++ show externalCfgs)
   let cfg =
         BuildConfig
-          { bc_static = staticBuildConfig,
-            bc_pandoc = "pandoc",
+          { bc_pandoc = "pandoc",
             bc_pdflatex = "pdflatex",
             bc_python = "python3",
             bc_convert = "convert",

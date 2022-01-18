@@ -30,7 +30,7 @@ test_keynoteFileToBuildPath = do
       ("build/plugins/keynote/abs" ++ (takeDirectory curDir) </> "my_presi.key")
       (takeDirectory curDir </> "my_presi.key")
   where
-    cfg = testBuildConfig []
+    cfg = testBuildConfig
     check fp expected expectedBack = do
       build <- keynoteFileToBuildPath cfg fp
       assertEqual expected build
@@ -48,4 +48,4 @@ test_buildPathToKeynoteFile = do
     (Right "/home/stefan/presi.key")
     (buildPathToKeynoteFile cfg "./build/plugins/keynote/abs/home/stefan/presi.key")
   where
-    cfg = testBuildConfig []
+    cfg = testBuildConfig

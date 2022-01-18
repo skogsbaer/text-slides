@@ -272,6 +272,13 @@ text-slides is the `pygments` theme. Here's how to use a different theme:
 For a theme include with pandoc, you can save to definition to a file with this command:
 `pandoc --print-highlight-style NAME_OF_THEME > FILE`
 
+### Variables
+
+The markdown content may use variables like this: ``{{variableName}}`
+
+The values of the variables are defined in a file `INPUT.yaml`, where
+`INPUT.md` is the name of the input file.
+
 ## Structuring Code
 
 ### Java

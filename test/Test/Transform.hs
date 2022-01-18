@@ -8,6 +8,7 @@ where
 
 import CoreRules
 import qualified Data.Text as T
+import qualified Data.Map.Strict as M
 import Test.Framework
 import Test.TestBuildConfig
 import Text.Heredoc
@@ -18,18 +19,19 @@ test_transform = do
   (out, _) <-
     transformMarkdown
       (\_ -> return ())
-      (testBuildConfig plugins)
+      testBuildConfig
       testBuildArgs
+      pluginMap
       "<input>"
       sampleInput
   assertEqual expected out
   where
+    keynote :: AnyPluginConfig IO
     keynote =
       AnyPluginConfig $
         PluginConfig
           { p_name = PluginName "keynote",
             p_kind = PluginWithoutBody,
-            p_rules = \_cfg _args -> return (),
             p_init = return (),
             p_expand = \_cfg _args () call -> do
               file <- exceptInM $ getRequiredStringValue unknownLocation "file" (pc_args call)
@@ -44,17 +46,17 @@ test_transform = do
                 ),
             p_forAllCalls = \_cfg _args _ -> return ()
           }
+    python :: AnyPluginConfig IO
     python =
       AnyPluginConfig $
         PluginConfig
           { p_name = PluginName "python",
             p_kind = PluginWithBody,
-            p_rules = \_cfg _args -> return (),
             p_init = return (),
             p_expand = \_cfg _args () call -> return ("~~~python\n" <> pc_body call <> "\n~~~", ()),
             p_forAllCalls = \_cfg _args _ -> return ()
           }
-    plugins = [keynote, python]
+    pluginMap = M.fromList (map (\p -> (anyPluginName p, p)) [keynote, python])
 
 sampleInput :: T.Text
 sampleInput =

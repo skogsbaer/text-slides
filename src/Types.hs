@@ -66,8 +66,6 @@ data BuildArgs = BuildArgs
   }
   deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
 
-type PluginMap m = M.Map PluginName (AnyPluginConfig m)
-
 data SyntaxTheme
   = SyntaxThemeName T.Text
   | SyntaxThemeFile FilePath
@@ -110,8 +108,7 @@ instance J.FromJSON ExternalLangConfigs where
     return $ ExternalLangConfigs langs
 
 data BuildConfig = BuildConfig
-  { bc_static :: StaticBuildConfig,
-    bc_pandoc :: FilePath,
+  { bc_pandoc :: FilePath,
     bc_pdflatex :: FilePath,
     bc_python :: FilePath, -- python 3
     bc_convert :: FilePath, -- imagemagick
@@ -266,6 +263,8 @@ data PluginCall = PluginCall
   }
   deriving (Eq, Show)
 
+type PluginMap m = M.Map PluginName (AnyPluginConfig m)
+
 data AnyPluginConfig action = forall state. AnyPluginConfig {pluginConfig :: PluginConfig state action}
 
 data PluginConfig state action = PluginConfig
@@ -296,3 +295,6 @@ instance Show (PluginConfig s a) where
 
 instance Show (AnyPluginConfig a) where
   showsPrec p (AnyPluginConfig cfg) = showsPrec p cfg
+
+anyPluginName :: AnyPluginConfig action -> PluginName
+anyPluginName (AnyPluginConfig cfg) = p_name cfg
