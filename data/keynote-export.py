@@ -27,7 +27,7 @@ def make_dirs(opts):
             os.mkdir(d)
 
 def export_keynote(filename, outpath, skip_builds):
-    filename = os.path.abspath(filename)
+    filename = os.path.realpath(filename)  # keynote does not like symlinks
     keynote = appscript.app('Keynote')
     k = appscript.k
     keynote_file = appscript.mactypes.File(filename)
