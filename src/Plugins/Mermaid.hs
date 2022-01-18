@@ -12,13 +12,12 @@ arguments for mermaid, the .mdd file the code for the diagram.
 
 -}
 module Plugins.Mermaid
-  ( mermaidPlugin,
+  ( mermaidPlugin, mermaidPluginRules
   )
 where
 
 import Control.Monad
 import Control.Monad.Trans.Except
-import CoreRules
 import qualified Data.Aeson as J
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Set as S
@@ -32,6 +31,7 @@ import Logging
 import System.Directory hiding (doesFileExist)
 import Types
 import Utils
+import RuleUtils
 
 data MermaidArgs = MermaidArgs
   { ma_width :: Maybe T.Text,
@@ -63,7 +63,6 @@ mermaidPlugin =
     PluginConfig
       { p_name = mermaidPluginName,
         p_kind = PluginWithBody,
-        p_rules = pluginRules,
         p_init = return (),
         p_expand = runPlugin,
         p_forAllCalls = processAllCalls
@@ -100,11 +99,13 @@ runMermaid cfg _buildArgs pdfFile = do
       mySystem INFO DontPrintStdout (bc_mermaid cfg) mermaidArgs Nothing
       mySystem INFO DontPrintStdout (bc_pdfcrop cfg) [tmpPdf, pdfFile] Nothing
 
-pluginRules :: BuildConfig -> BuildArgs -> Rules ()
-pluginRules cfg args = do
-  (pluginDir cfg mermaidPluginName) ++ "/*.pdf" %> runMermaid cfg args
-  (pluginDir cfg mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile cfg args]
-  (pluginDir cfg mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile cfg args]
+mermaidPluginRules :: BuildArgs -> Rules ()
+mermaidPluginRules args = do
+  (pluginDir mermaidPluginName) ++ "/*.pdf" %> \f -> do
+    cfg <- getBuildConfig
+    runMermaid cfg args f
+  (pluginDir mermaidPluginName) ++ "/*.json" %> \_ -> need [mdRawOutputFile args]
+  (pluginDir mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile args]
 
 data MermaidCall = MermaidCall
   { mc_where :: T.Text,
@@ -132,15 +133,15 @@ mermaidCallAndHash call = do
     toArg opt (Just i) = [opt, showText i]
 
 runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
-runPlugin cfg _buildArgs () call = do
+runPlugin _cfg _buildArgs () call = do
   args <- exceptInM $ parseArgs call
   (mermaidCall, hash) <- mermaidCallAndHash call
-  let outDir = pluginDir cfg mermaidPluginName
+  let outDir = pluginDir mermaidPluginName
       outFile ext =
-        pluginDir cfg mermaidPluginName </> T.unpack (unHash hash) <.> ext
+        pluginDir mermaidPluginName </> T.unpack (unHash hash) <.> ext
       diagFile = outFile ".pdf"
       -- all output files are place directly in the build directory
-      relDiagFile = makeRelative (bc_buildDir cfg) diagFile
+      relDiagFile = makeRelative buildDir diagFile
   liftIO $ createDirectoryIfMissing True outDir
   liftIO $ J.encodeFile (outFile ".json") mermaidCall
   liftIO $ T.writeFile (outFile ".mdd") (pc_body call)
@@ -149,13 +150,13 @@ runPlugin cfg _buildArgs () call = do
 
 processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
-processAllCalls cfg _buildArgs calls = do
+processAllCalls _cfg _buildArgs calls = do
   -- remove unreferenced files
   allHashes <- forM calls $ mermaidCallAndHash >=> (return . snd)
   let setOfHashes = S.fromList (map unHash allHashes)
   files <-
     liftIO $
-      myListDirectory (pluginDir cfg mermaidPluginName) $ \f ->
+      myListDirectory (pluginDir mermaidPluginName) $ \f ->
         takeExtension f `elem` [".pdf", ".json", ".mdd"]
   forM_ files $ \file -> do
     let hash = T.pack $ takeBaseName file

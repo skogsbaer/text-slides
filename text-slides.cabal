@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 249fac62574ffb71afe019974ad400386b22de62d9d95b5115e05de2553a2626
+-- hash: 4e80a51058148397b03ac02face1eca32741b1de3be3a5fb4bb26fb3f1bd89dd
 
 name:           text-slides
 version:        0.1
@@ -38,6 +38,7 @@ library
       LatexRules
       Logging
       Parser
+      Plugins.AllPlugins
       Plugins.Code
       Plugins.Keynote
       Plugins.Mermaid
@@ -59,7 +60,6 @@ library
       DoAndIfThenElse
       EmptyDataDecls
       FlexibleContexts
-      GeneralizedNewtypeDeriving
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
@@ -111,7 +111,6 @@ executable text-slides
       DoAndIfThenElse
       EmptyDataDecls
       FlexibleContexts
-      GeneralizedNewtypeDeriving
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
@@ -145,7 +144,6 @@ test-suite unit-tests
       DoAndIfThenElse
       EmptyDataDecls
       FlexibleContexts
-      GeneralizedNewtypeDeriving
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving

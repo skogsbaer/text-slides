@@ -99,7 +99,6 @@ default-extensions:
   - DoAndIfThenElse
   - EmptyDataDecls
   - FlexibleContexts
-  - GeneralizedNewtypeDeriving
   - OverloadedStrings
   - ScopedTypeVariables
   - StandaloneDeriving

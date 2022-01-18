@@ -19,7 +19,7 @@ import Test.Framework
 import Text.Heredoc
 import Types
 
-testBuildConfig :: [AnyPluginConfig m] -> GenericBuildConfig m
+testBuildConfig :: [AnyPluginConfig m] -> BuildConfig
 testBuildConfig plugins =
   BuildConfig
     { bc_buildDir = "build",

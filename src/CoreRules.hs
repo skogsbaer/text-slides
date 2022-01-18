@@ -28,6 +28,7 @@ import System.FilePath
 import Types
 import Utils
 import Vars
+import Plugins.AllPlugins
 
 getDependenciesFromPandocJson :: FilePath -> IO [FilePath]
 getDependenciesFromPandocJson inFile = do
@@ -68,13 +69,14 @@ getDependenciesFromPandocJson inFile = do
 
 data PandocMode = PandocModeHtml | PandocModeLatex
 
-runPandoc :: GenericBuildConfig m -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
+runPandoc :: BuildConfig -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
 runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
   need [inFile]
-  deps <- fmap (map (\f -> bc_buildDir cfg </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
+  deps <- fmap (map (\f -> buildDir </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
   writeDeps outFile deps
-  syntaxDefs <-
-    forM (V.toList $ bc_syntaxDefFiles cfg) $ \f -> do
+  syntaxDefs <- do
+    let files = mapMaybe elc_syntaxFile (unExternalLangConfigs $ bc_externalLangConfigs cfg)
+    forM files $ \f -> do
       need [f]
       return ("--syntax-definition=" ++ f)
   hightlightTheme <-
@@ -127,12 +129,13 @@ transformMarkdown ::
   forall m.
   MonadFail m =>
   (T.Text -> m ()) ->
-  GenericBuildConfig m ->
+  BuildConfig ->
   BuildArgs ->
+  PluginMap m ->
   FilePath ->
   T.Text ->
   m (T.Text, [PluginCall])
-transformMarkdown warnFun cfg buildArgs inFile md = do
+transformMarkdown warnFun cfg buildArgs pm inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
   (revLines, _) <- foldM tokenToLine ([], M.empty) tokens
   let calls =
@@ -167,7 +170,7 @@ transformMarkdown warnFun cfg buildArgs inFile md = do
       case M.lookup pluginName stateMap of
         Just x -> return x
         Nothing ->
-          case M.lookup pluginName (bc_plugins cfg) of
+          case M.lookup pluginName pm of
             Nothing ->
               error $
                 "BUG: Plugin " ++ show pluginName
@@ -176,21 +179,27 @@ transformMarkdown warnFun cfg buildArgs inFile md = do
               state <- p_init plugin
               return (AnyPluginWithState plugin state)
     pluginKindMap =
-      flip M.map (bc_plugins cfg) $ \(AnyPluginConfig plugin) -> p_kind plugin
+      flip M.map pm $ \(AnyPluginConfig plugin) -> p_kind plugin
 
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
   md' <- myReadFile inFile
-  md <- case ba_varsFile args of
-    Nothing -> pure md'
-    Just f -> do
-      vars <- readVarsFile f
+  let varsFile = ba_inputFile args -<.> "yaml"
+  varsFileExists <- doesFileExist varsFile
+  md <- case varsFileExists of
+    False -> do
+      info ("Variables file " ++ varsFile ++ " does not exist")
+      pure md'
+    True -> do
+      note ("Reading variables from " ++ varsFile)
+      vars <- readVarsFile varsFile
       pure (expandVars vars md')
-  (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args inFile md
+  let pm = pluginMap cfg
+  (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args pm inFile md
   let callMap = foldr (\call m -> M.insertWith (++) (pc_pluginName call) [call] m) M.empty calls
   forM_ (M.toList callMap) $ \(pluginName, calls) -> do
     res <-
-      case M.lookup pluginName (bc_plugins cfg) of
+      case M.lookup pluginName pm of
         Nothing ->
           error $
             "BUG: Plugin with name " ++ show pluginName ++ " missing in plugin map"
@@ -212,38 +221,38 @@ generateJson cfg inFile {- .mdraw -} outFile {- .json -} = do
   note $ "Generating " ++ outFile
   mySystem INFO DontPrintStdout (bc_pandoc cfg) ["--from=markdown", "--output=" ++ outFile, inFile] Nothing
 
-coreRules :: BuildConfig -> BuildArgs -> Rules ()
-coreRules cfg args = do
+coreRules :: BuildArgs -> Rules ()
+coreRules args = do
   -- We do not use pandoc for generating pdf because we want to get better performance.
   -- Pandoc just blindly reruns pdflatex 2 times, even if it's not necessary. We further
   -- speed up compilation by caching the preamble with mylatexformat. To make this work,
   -- the latex source code must contain \endofdump at the start of a line.
-  [outFile ".html"] &%> \[html] ->
+  [outFile ".html"] &%> \[html] -> do
+    cfg <- getBuildConfig
     void $ runPandoc cfg args PandocModeHtml json html
-  [outFile ".tex", outFile ".deps"] &%> \[tex, _] ->
+  [outFile ".tex", outFile ".deps"] &%> \[tex, _] -> do
+    cfg <- getBuildConfig
     void $ runPandoc cfg args PandocModeLatex json tex
-  latexRules cfg args
-  raw %> generateRawMarkdown cfg args (ba_inputFile args)
-  json %> generateJson cfg raw
-  mapM_ (\(_, AnyPluginConfig p) -> p_rules p cfg args) (M.toList (bc_plugins cfg))
+  latexRules args
+  raw %> \out -> do
+    cfg <- getBuildConfig
+    generateRawMarkdown cfg args (ba_inputFile args) out
+  json %> \out -> do
+    cfg <- getBuildConfig
+    generateJson cfg raw out
+  allPluginRules args
   isStaticOutFile ?> publishStaticFile
   where
-    outFile ext = mainOutputFile cfg args ext
+    outFile ext = mainOutputFile args ext
     raw = outFile mdRawExt
     json = outFile ".json"
     isStaticOutFile f =
       (isImage f || isStaticPdf f)
-        && bc_buildDir cfg `isPathPrefix` f
-        && not (pluginDir' cfg `isPathPrefix` f)
+        && buildDir `isPathPrefix` f
+        && not (pluginDir' `isPathPrefix` f)
     publishStaticFile out =
-      copyFileChanged (outputFileToInputFile cfg args out) out
+      copyFileChanged (outputFileToInputFile args out) out
     isImage f = takeExtension f `elem` [".jpg", ".jpeg", ".png"]
     isStaticPdf f =
       takeExtension f == ".pdf"
         && takeBaseName (ba_inputFile args) /= takeBaseName f
-
-mdRawExt :: String
-mdRawExt = ".mdraw"
-
-mdRawOutputFile :: BuildConfig -> BuildArgs -> FilePath
-mdRawOutputFile cfg args = mainOutputFile cfg args mdRawExt

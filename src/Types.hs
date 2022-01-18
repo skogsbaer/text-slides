@@ -1,18 +1,23 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ExistentialQuantification #-}
-
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 module Types where
 
 import Control.Monad.Trans.Except
+import Data.Aeson as J
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Data.Vector as V
 import Data.Foldable (forM_)
 import Development.Shake
+import Development.Shake.Classes
 import Safe
 import System.FilePath
 import Utils
+import GHC.Generics (Generic)
 
 type Fail a = Either T.Text a
 
@@ -53,22 +58,59 @@ outputModeToExtension m =
 allOutputModes :: S.Set OutputMode
 allOutputModes = S.fromList [minBound .. maxBound]
 
+-- BuildArgs must not contain any file on which we need to put a dependency with need.
 data BuildArgs = BuildArgs
   { ba_inputFile :: FilePath,
-    ba_varsFile :: Maybe FilePath,
     ba_verbose :: Bool,
     ba_searchDir :: FilePath
   }
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
 
 type PluginMap m = M.Map PluginName (AnyPluginConfig m)
 
 data SyntaxTheme
   = SyntaxThemeName T.Text
   | SyntaxThemeFile FilePath
-  deriving (Show)
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
 
-data GenericBuildConfig m = BuildConfig
-  { bc_buildDir :: FilePath,
+data StaticBuildConfig
+  = StaticBuildConfig
+  { sbc_buildDir :: FilePath }
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
+
+staticBuildConfig :: StaticBuildConfig
+staticBuildConfig =
+  StaticBuildConfig
+  { sbc_buildDir = "build" }
+
+data ExternalLangConfig = ExternalLangConfig
+  { elc_name :: T.Text,
+    elc_fileExt :: String,
+    elc_commentStart :: T.Text,
+    elc_commentEnd :: Maybe T.Text,
+    elc_syntaxFile :: Maybe FilePath
+  }
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
+
+newtype ExternalLangConfigs = ExternalLangConfigs {unExternalLangConfigs :: [ExternalLangConfig]}
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
+
+instance J.FromJSON ExternalLangConfig where
+  parseJSON = J.withObject "ExternalLangConfig" $ \v -> do
+    elc_name <- v .: "name"
+    elc_syntaxFile <- v .:? "syntaxFile"
+    elc_fileExt <- v .: "extension"
+    elc_commentStart <- v .: "commentStart"
+    elc_commentEnd <- v .:? "commentEnd"
+    return ExternalLangConfig {..}
+
+instance J.FromJSON ExternalLangConfigs where
+  parseJSON = J.withObject "ExternalLangConfigs" $ \v -> do
+    langs <- v .: "languages"
+    return $ ExternalLangConfigs langs
+
+data BuildConfig = BuildConfig
+  { bc_static :: StaticBuildConfig,
     bc_pandoc :: FilePath,
     bc_pdflatex :: FilePath,
     bc_python :: FilePath, -- python 3
@@ -80,18 +122,27 @@ data GenericBuildConfig m = BuildConfig
     bc_luaFilter :: Maybe FilePath,
     bc_mermaidConfig :: Maybe FilePath,
     bc_syntaxTheme :: Maybe SyntaxTheme,
-    bc_syntaxDefFiles :: V.Vector FilePath,
-    bc_plugins :: PluginMap m
+    bc_externalLangConfigs :: ExternalLangConfigs
   }
-  deriving (Show)
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData)
 
-pluginDir' :: GenericBuildConfig m -> FilePath
-pluginDir' cfg = bc_buildDir cfg </> "plugins"
+buildDir :: FilePath
+buildDir = sbc_buildDir staticBuildConfig
 
-pluginDir :: GenericBuildConfig m -> PluginName -> FilePath
-pluginDir cfg plugin = pluginDir' cfg </> T.unpack (unPluginName plugin)
+pluginDir' :: FilePath
+pluginDir' = buildDir </> "plugins"
 
-type BuildConfig = GenericBuildConfig Action
+pluginDir :: PluginName -> FilePath
+pluginDir plugin = pluginDir' </> T.unpack (unPluginName plugin)
+
+newtype BuildConfigKey
+  = BuildConfigKey ()
+  deriving (Show,Typeable,Eq,Generic,Hashable,Binary,NFData)
+
+type instance RuleResult BuildConfigKey = BuildConfig
+
+getBuildConfig :: Action BuildConfig
+getBuildConfig = askOracle (BuildConfigKey ())
 
 newtype PluginName = PluginName {unPluginName :: T.Text}
   deriving (Eq, Ord, Show)
@@ -221,17 +272,15 @@ data PluginConfig state action = PluginConfig
   { p_name :: PluginName,
     p_kind :: PluginKind,
     -- | Called in the conversion step .md ~~> .mdraw
-    p_rules :: GenericBuildConfig action -> BuildArgs -> Rules (),
-    -- | Called in the conversion step .md ~~> .mdraw
     p_init :: action state,
     p_expand ::
-      GenericBuildConfig action ->
+      BuildConfig ->
       BuildArgs ->
       state ->
       PluginCall ->
       ExceptT T.Text action (T.Text, state),
     p_forAllCalls ::
-      GenericBuildConfig action ->
+      BuildConfig ->
       BuildArgs ->
       [PluginCall] ->
       ExceptT T.Text action ()

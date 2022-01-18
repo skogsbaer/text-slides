@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module BuildConfig
-  ( getBuildConfig,
+  ( computeBuildConfig, computeBuildArgs,
     ExternalLangConfig (..),
     ExternalLangConfigs (..),
   )
@@ -9,34 +9,27 @@ where
 
 import Cmdline
 import Control.Monad
-import Data.Aeson ((.:), (.:?))
 import qualified Data.Aeson as J
 import qualified Data.List as L
-import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Text as T
-import qualified Data.Vector as V
-import Development.Shake hiding (doesFileExist)
+import Development.Shake
 import Logging
 import Plugins.Code
-import Plugins.Keynote
-import Plugins.Mermaid
-import System.Directory
+import System.Directory hiding (doesFileExist, doesDirectoryExist)
+import qualified System.Directory as Dir
 import System.Exit
 import System.FilePath
 import Types
 import Utils
-
-allPlugins :: [ExternalLangConfig] -> [AnyPluginConfig Action]
-allPlugins moreLanguages = [keynotePlugin, mermaidPlugin] ++ (codePlugins moreLanguages)
 
 getHomeCfgDir :: IO FilePath
 getHomeCfgDir = do
   home <- getHomeDirectory
   return $ home </> ".text-slides"
 
-getBuildConfig :: CmdlineOpts -> IO (BuildConfig, BuildArgs)
-getBuildConfig opts = do
+computeBuildArgs :: CmdlineOpts -> IO BuildArgs
+computeBuildArgs opts = do
   inputFile <-
     case co_inputFile opts of
       Just f -> return f
@@ -54,25 +47,30 @@ getBuildConfig opts = do
                   ++ show files
               )
             exitWith (ExitFailure 1)
-  exists <- doesFileExist inputFile
+  exists <- Dir.doesFileExist inputFile
   unless exists $ do
     putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
     exitWith (ExitFailure 1)
-  varsFile <- do
-    let f = inputFile <.> ".yaml"
-    b <- Development.Shake.doesFileExist f
-    pure $ if b then Just f else Nothing
   let searchDir = takeDirectory inputFile
-      searchFile = searchFile' searchDir
-      searchFiles = searchFiles' searchDir
-  beamerHeader <- searchFiles "beamer-header.tex" (co_beamerHeader opts) >>= mapM canonicalizePath
-  infoIO ("beamerHeader: " ++ show beamerHeader)
+      args =
+        BuildArgs
+          { ba_inputFile = inputFile,
+            ba_searchDir = searchDir,
+            ba_verbose = co_verbose opts
+          }
+  pure args
+
+computeBuildConfig :: CmdlineOpts -> BuildArgs -> Action BuildConfig
+computeBuildConfig opts args = do
+  beamerHeader <-
+    searchFiles "beamer-header.tex" (co_beamerHeader opts) >>= mapM (liftIO . canonicalizePath)
+  info ("beamerHeader: " ++ show beamerHeader)
   htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
-  infoIO ("htmlHeader: " ++ show htmlHeader)
+  info ("htmlHeader: " ++ show htmlHeader)
   luaFilter <- searchFile "pandoc-filter.lua" (co_luaFilter opts) >>= canonicalize
-  infoIO ("luaFilter: " ++ show luaFilter)
+  info ("luaFilter: " ++ show luaFilter)
   mermaidConfig <- searchFile "mermaid-config.json" (co_mermaidConfig opts) >>= canonicalize
-  infoIO ("mermaidConfig: " ++ show luaFilter)
+  info ("mermaidConfig: " ++ show luaFilter)
   syntaxTheme <- do
     mf <- searchFile "syntax-highlighting.theme" (co_syntaxTheme opts)
     case mf of
@@ -80,14 +78,14 @@ getBuildConfig opts = do
       Just f -> do
         b <- doesFileExist f
         if b
-          then (Just . SyntaxThemeFile) <$> canonicalizePath f
+          then (Just . SyntaxThemeFile) <$> liftIO (canonicalizePath f)
           else return (Just $ SyntaxThemeName (T.pack f))
-  infoIO ("syntaxHighlighting: " ++ show syntaxTheme)
-  externalCfgs <- V.toList . unExternalLangConfigs <$> getExternLangConfigs
-  infoIO ("External code plugins: " ++ show externalCfgs)
+  info ("syntaxHighlighting: " ++ show syntaxTheme)
+  externalCfgs <- computeExternLangConfigs
+  info ("External code plugins: " ++ show externalCfgs)
   let cfg =
         BuildConfig
-          { bc_buildDir = "build",
+          { bc_static = staticBuildConfig,
             bc_pandoc = "pandoc",
             bc_pdflatex = "pdflatex",
             bc_python = "python3",
@@ -99,72 +97,47 @@ getBuildConfig opts = do
             bc_luaFilter = luaFilter,
             bc_mermaidConfig = mermaidConfig,
             bc_syntaxTheme = syntaxTheme,
-            bc_plugins =
-              M.fromList $
-                map
-                  (\(AnyPluginConfig p) -> (p_name p, AnyPluginConfig p))
-                  (allPlugins externalCfgs),
-            bc_syntaxDefFiles = V.fromList $ mapMaybe elc_syntaxFile externalCfgs
+            bc_externalLangConfigs = externalCfgs
           }
-      args =
-        BuildArgs
-          { ba_inputFile = inputFile,
-            ba_varsFile = varsFile,
-            ba_searchDir = searchDir,
-            ba_verbose = co_verbose opts
-          }
-  return (cfg, args)
+  return cfg
   where
     canonicalize Nothing = return Nothing
     canonicalize (Just p) = do
-      cp <- canonicalizePath p
+      cp <- liftIO (canonicalizePath p)
       return (Just cp)
-    searchFile' :: FilePath -> FilePath -> Maybe FilePath -> IO (Maybe FilePath)
-    searchFile' searchDir path mCmdLine = do
-      allFiles <- searchFiles' searchDir path mCmdLine
-      case reverse allFiles of
-        [] -> return Nothing
-        (x:_) -> return (Just x)
-    searchFiles' :: FilePath -> FilePath -> Maybe FilePath -> IO [FilePath]
-    searchFiles' searchDir path mCmdLine = do
-      homeCfgDir <- getHomeCfgDir
-      let candidates = [homeCfgDir </> path, searchDir </> path]
-      results <- forM candidates $ \cand -> do
-        b <- doesFileExist cand
-        return $ if b then Just cand else Nothing
-      return $ catMaybes (results ++ [mCmdLine])
+    searchFile = searchFile' (ba_searchDir args)
+    searchFiles = searchFiles' (ba_searchDir args)
 
-newtype ExternalLangConfigs = ExternalLangConfigs {unExternalLangConfigs :: V.Vector ExternalLangConfig}
-  deriving (Show, Eq)
+searchFile' :: FilePath -> FilePath -> Maybe FilePath -> Action (Maybe FilePath)
+searchFile' searchDir path mCmdLine = do
+  allFiles <- searchFiles' searchDir path mCmdLine
+  case reverse allFiles of
+    [] -> return Nothing
+    (x:_) -> return (Just x)
 
-instance J.FromJSON ExternalLangConfig where
-  parseJSON = J.withObject "ExternalLangConfig" $ \v -> do
-    elc_name <- v .: "name"
-    elc_syntaxFile <- v .:? "syntaxFile"
-    elc_fileExt <- v .: "extension"
-    elc_commentStart <- v .: "commentStart"
-    elc_commentEnd <- v .:? "commentEnd"
-    return ExternalLangConfig {..}
+searchFiles' :: FilePath -> FilePath -> Maybe FilePath -> Action [FilePath]
+searchFiles' searchDir path mCmdLine = do
+  homeCfgDir <- liftIO getHomeCfgDir
+  let candidates = [homeCfgDir </> path, searchDir </> path]
+  results <- forM candidates $ \cand -> do
+    b <- doesFileExist cand
+    return $ if b then Just cand else Nothing
+  return $ catMaybes (results ++ [mCmdLine])
 
-instance J.FromJSON ExternalLangConfigs where
-  parseJSON = J.withObject "ExternalLangConfigs" $ \v -> do
-    langs <- v .: "languages"
-    return $ ExternalLangConfigs langs
-
-getExternLangConfigs :: IO ExternalLangConfigs
-getExternLangConfigs = do
-  homeCfgDir <- getHomeCfgDir
+computeExternLangConfigs :: Action ExternalLangConfigs
+computeExternLangConfigs = do
+  homeCfgDir <- liftIO getHomeCfgDir
   let f = homeCfgDir </> "code.json"
   b <- doesFileExist f
   if not b
-    then return $ ExternalLangConfigs V.empty
+    then return $ ExternalLangConfigs []
     else loadExternalLangConfigs f
   where
     loadExternalLangConfigs f = do
-      res <- J.eitherDecodeFileStrict f
-      case res of
+      bs <- myReadFileBs f
+      case J.eitherDecodeStrict bs of
         Left err -> fail ("Error parsing contents of " ++ f ++ ": " ++ err)
         Right (ExternalLangConfigs vs) ->
-          return $ ExternalLangConfigs $ V.map (makeRel (takeDirectory f)) vs
+          return $ ExternalLangConfigs $ map (makeRel (takeDirectory f)) vs
     makeRel dir cfg =
       cfg {elc_syntaxFile = fmap (\x -> dir </> x) (elc_syntaxFile cfg)}

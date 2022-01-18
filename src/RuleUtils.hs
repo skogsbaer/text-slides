@@ -19,9 +19,9 @@ readDeps fp = do
   deps <- myReadFile (depsFile fp)
   return $ map T.unpack $ filter (not . T.null) $ map T.strip $ T.lines deps
 
-outputFileToInputFile :: BuildConfig -> BuildArgs -> FilePath -> FilePath
-outputFileToInputFile cfg args out =
-  let prefix = bc_buildDir cfg ++ "/"
+outputFileToInputFile :: BuildArgs -> FilePath -> FilePath
+outputFileToInputFile args out =
+  let prefix = buildDir ++ "/"
    in if not (prefix `L.isPrefixOf` out)
         then error ("outputFileToInputFile: not an output file: " ++ out)
         else ba_searchDir args </> drop (length prefix) out
@@ -29,7 +29,14 @@ outputFileToInputFile cfg args out =
 -- To keep things simple, the output file for the presentation is always placed at the
 -- toplevel of the build dir. This means, that two input files must not have the same
 -- basename.
-mainOutputFile :: BuildConfig -> BuildArgs -> String -> FilePath
-mainOutputFile cfg args ext =
-  bc_buildDir cfg </> takeBaseName (ba_inputFile args) <.> ext
+mainOutputFile :: BuildArgs -> String -> FilePath
+mainOutputFile args ext =
+  sbc_buildDir staticBuildConfig </> takeBaseName (ba_inputFile args) <.> ext
+
+mdRawOutputFile :: BuildArgs -> FilePath
+mdRawOutputFile args = mainOutputFile args mdRawExt
+
+mdRawExt :: String
+mdRawExt = ".mdraw"
+
 

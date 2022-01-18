@@ -41,13 +41,13 @@ findPhrase t (x : xs) =
   if x `T.isInfixOf` t then Just x else findPhrase t xs
 
 mkLatexEnv :: BuildConfig -> IO Env
-mkLatexEnv cfg = do
+mkLatexEnv _cfg = do
   oldEnv <- M.fromList . map (bimap T.pack T.pack) <$> liftIO getEnvironment
   let sep = T.singleton searchPathSeparator
       texInputs =
         case M.lookup texInputsKey oldEnv of
-          Nothing -> T.pack (bc_buildDir cfg) <> sep <> ""
-          Just old -> T.pack (bc_buildDir cfg) <> sep <> old
+          Nothing -> T.pack buildDir <> sep <> ""
+          Just old -> T.pack buildDir <> sep <> old
   return $ M.insert texInputsKey texInputs oldEnv
   where
     texInputsKey = "TEXINPUTS"
@@ -121,18 +121,19 @@ readFileWithUnknownEncoding fp = do
     Left _exc -> return $ T.pack $ BSC.unpack bs -- assume it's iso-8859-1
     Right t -> return t
 
-genPdf :: BuildConfig -> FilePath -> Action ()
-genPdf cfg pdf = do
+genPdf :: FilePath -> Action ()
+genPdf pdf = do
+  cfg <- getBuildConfig
   need [pdf -<.> texBodyExt, pdf -<.> preambleCacheExt]
   deps <- readDeps pdf
   need deps
   info ("Deps for " ++ pdf ++ ": " ++ show deps)
   env <- liftIO $ mkLatexEnv cfg
   note ("Generating " ++ pdf)
-  runPdfLatex env 0
+  runPdfLatex cfg env 0
   checkForOverfullSlides pdf
   where
-    runPdfLatex env runNo = do
+    runPdfLatex cfg env runNo = do
       let logFile = pdf -<.> ".log"
           navFile = pdf -<.> ".nav"
       navExists <- liftIO $ Dir.doesFileExist navFile
@@ -145,7 +146,7 @@ genPdf cfg pdf = do
           "-interaction",
           "nonstopmode",
           "-output-directory",
-          bc_buildDir cfg,
+          buildDir,
           pdf -<.> texBodyExt
         ]
         (Just env)
@@ -177,7 +178,7 @@ genPdf cfg pdf = do
               else do
                 note "Re-running latex because frame numbers changed"
                 return True
-      when needRerun $ runPdfLatex env (runNo + 1)
+      when needRerun $ runPdfLatex cfg env (runNo + 1)
     maxReruns = 3
 
 splitPreamble :: FilePath -> T.Text -> Maybe (T.Text, T.Text)
@@ -213,8 +214,9 @@ genTexPreamble texPreamble = do
       note ("Generating " ++ texPreamble)
       myWriteFile texPreamble preamble
 
-genFmt :: BuildConfig -> FilePath -> Action ()
-genFmt cfg fmt = do
+genFmt :: FilePath -> Action ()
+genFmt fmt = do
+  cfg <- getBuildConfig
   let texPreamble = fmt -<.> texPreambleExt
   preamble <- myReadFile texPreamble
   if preamble == ""
@@ -231,7 +233,7 @@ genFmt cfg fmt = do
           "-interaction",
           "nonstopmode",
           "-output-directory",
-          bc_buildDir cfg,
+          buildDir,
           "-jobname=" ++ jobname,
           "&pdflatex",
           "mylatexformat.ltx",
@@ -239,9 +241,11 @@ genFmt cfg fmt = do
         ]
         (Just env)
 
-latexRules :: BuildConfig -> BuildArgs -> Rules ()
-latexRules cfg args = do
-  (mainOutputFile cfg args "pdf") %> genPdf cfg
-  (bc_buildDir cfg ++ ("/*") <> texBodyExt) %> genTexBody
-  (bc_buildDir cfg ++ ("/*") <> texPreambleExt) %> genTexPreamble
-  (bc_buildDir cfg ++ "/*.fmt") %> genFmt cfg
+latexRules :: BuildArgs -> Rules ()
+latexRules args = do
+  (mainOutputFile args "pdf") %> genPdf
+  (d ++ ("/*") <> texBodyExt) %> genTexBody
+  (d ++ ("/*") <> texPreambleExt) %> genTexPreamble
+  (d ++ "/*.fmt") %> genFmt
+  where
+    d = sbc_buildDir staticBuildConfig

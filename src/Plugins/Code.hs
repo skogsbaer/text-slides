@@ -127,14 +127,10 @@ mkCodePlugin name cfg =
   PluginConfig
     { p_name = name,
       p_kind = PluginWithBody,
-      p_rules = pluginRules,
       p_init = return initialCodeState,
       p_expand = runPlugin cfg,
       p_forAllCalls = processAllCalls cfg
     }
-
-pluginRules :: BuildConfig -> BuildArgs -> Rules ()
-pluginRules _cfg _args = return ()
 
 runPlugin ::
   LangConfig ->
@@ -263,10 +259,10 @@ appendCollectedCode cc place file =
 
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
-processAllCalls langCfg cfg buildArgs calls = do
+processAllCalls langCfg _cfg buildArgs calls = do
   let allPlugins = Set.fromList (map pc_pluginName  calls)
   forM_ allPlugins $ \pluginName -> do
-    let dir = pluginDir cfg pluginName
+    let dir = pluginDir pluginName
     liftIO $ removeAllFilesInDirectory dir `catch` (\(_::IOError) -> pure ())
   codeMap <- exceptInM $ foldM collectCode M.empty calls
   time <- liftIO getCurrentTime
@@ -329,7 +325,7 @@ processAllCalls langCfg cfg buildArgs calls = do
                 lc_makeDefaultFilename langCfg $
                 replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
               Just f -> f
-          file = pluginDir cfg (pc_pluginName call) </> baseFile
+          file = pluginDir (pc_pluginName call) </> baseFile
           body =
             maybe "" (\t -> t <> "\n") (ca_prepend args) <>
             (comment (ca_comment args) $ T.stripEnd (pc_body call))
@@ -361,15 +357,6 @@ data LangConfig = LangConfig
     lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text,
     lc_rewriteLine :: T.Text -> T.Text
   }
-
-data ExternalLangConfig = ExternalLangConfig
-  { elc_name :: T.Text,
-    elc_fileExt :: String,
-    elc_commentStart :: T.Text,
-    elc_commentEnd :: Maybe T.Text,
-    elc_syntaxFile :: Maybe FilePath
-  }
-  deriving (Show, Eq)
 
 mkLangConfig :: String -> T.Text -> Maybe T.Text -> LangConfig
 mkLangConfig ext commentStart commentEnd =

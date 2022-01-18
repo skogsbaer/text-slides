@@ -12,7 +12,7 @@ the end.
 
 -}
 module Plugins.Keynote
-  ( keynotePlugin,
+  ( keynotePlugin, keynotePluginRules,
     keynoteFileToBuildPath,
     buildPathToKeynoteFile,
   )
@@ -71,7 +71,6 @@ keynotePlugin =
     PluginConfig
       { p_name = keynotePluginName,
         p_kind = PluginWithoutBody,
-        p_rules = pluginRules,
         p_init = return (),
         p_expand = runPlugin,
         p_forAllCalls = processAllCalls
@@ -80,11 +79,11 @@ keynotePlugin =
 -- | Convert a keynote file into a path in the build directory where the results of extracting
 -- the images of the presentation will be placed. The inverse of this function is
 -- `buildPathToKeynoteFile`.
-keynoteFileToBuildPath :: GenericBuildConfig m -> FilePath -> IO FilePath
-keynoteFileToBuildPath cfg (normalise -> keynoteFile) =
+keynoteFileToBuildPath :: BuildConfig -> FilePath -> IO FilePath
+keynoteFileToBuildPath _cfg (normalise -> keynoteFile) =
   normaliseEx <$> do
     relOrAbs <- makeRelativeToCurrentDirectory keynoteFile
-    let topDir = pluginDir cfg keynotePluginName
+    let topDir = pluginDir keynotePluginName
     case splitDirectories relOrAbs of
       components@("/" : _) -> return $ handleAbs topDir (joinPath components)
       components -> do
@@ -98,9 +97,9 @@ keynoteFileToBuildPath cfg (normalise -> keynoteFile) =
     handleAbs topDir abs = topDir </> "abs" ++ abs
 
 -- | Inverse of `keynoteFileToBuildPath`
-buildPathToKeynoteFile :: GenericBuildConfig m -> FilePath -> Fail FilePath
-buildPathToKeynoteFile cfg (normalise -> fp) = do
-  let topDir = pluginDir cfg keynotePluginName
+buildPathToKeynoteFile :: BuildConfig -> FilePath -> Fail FilePath
+buildPathToKeynoteFile _cfg (normalise -> fp) = do
+  let topDir = pluginDir keynotePluginName
       absDir = topDir </> "abs/"
       relDir = topDir </> "rel/"
   if
@@ -133,10 +132,14 @@ runKeynoteExport cfg hashFile = do
   mySystem INFO PrintStdout (bc_python cfg) exportArgs Nothing
   myWriteFile hashFile (unHash hash)
 
-pluginRules :: BuildConfig -> BuildArgs -> Rules ()
-pluginRules cfg _args = do
-  isKeynotePdf ?> \pdf -> need [fromJust (slideImagePathToPresentationHashPath pdf)]
-  "//presentation.keyhash" %> runKeynoteExport cfg
+keynotePluginRules :: BuildArgs -> Rules ()
+keynotePluginRules _args = do
+  isKeynotePdf ?> \pdf -> do
+    note (show (slideImagePathToPresentationHashPath pdf))
+    need [fromJust (slideImagePathToPresentationHashPath pdf)]
+  "//presentation.keyhash" %> \f -> do
+    cfg <- getBuildConfig
+    runKeynoteExport cfg f
   where
     isKeynotePdf fp = isJust (slideImagePathToPresentationHashPath fp)
 
@@ -145,7 +148,7 @@ runPlugin cfg _buildArgs () call = do
   args <- exceptInM $ parseArgs call
   dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
   -- all output files are place directly in the build directory
-  let relDir = makeRelative (bc_buildDir cfg) dir
+  let relDir = makeRelative buildDir dir
       fileName =
         if ka_trim args
           then printf "slides_%03d-crop.pdf" (ka_slide args)
