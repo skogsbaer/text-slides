@@ -158,18 +158,15 @@ isPathPrefix prefix full =
 
 markdownImage :: FilePath -> (Maybe T.Text, Maybe T.Text) -> Bool -> T.Text
 markdownImage path (width, height) center =
-  let dimensions =
+  let attrs =
         case catMaybes
           [ fmap (\w -> "width=" <> w) width,
-            fmap (\w -> "height=" <> w) height
+            fmap (\w -> "height=" <> w) height,
+            if center then Just ".Center" else Nothing
           ] of
           [] -> ""
           l -> "{" <> T.intercalate " " l <> "}"
-      prefix =
-        case center of
-          True -> "![center]"
-          False -> "![]"
-  in prefix <> "(" <> T.pack path <> ")" <> dimensions
+  in "![](" <> T.pack path <> ")" <> attrs
 
 removeAllFilesInDirectory :: FilePath -> IO ()
 removeAllFilesInDirectory path = do
