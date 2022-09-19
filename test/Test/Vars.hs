@@ -1,4 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
 module Test.Vars
@@ -21,6 +20,6 @@ test_expandVars = do
 
 test_readVars :: IO ()
 test_readVars = do
-  vm <- readVarsFromBs  "<input>" "lecture: \"Anwendungsentwicklung\"\npingoSession: \"230050\""
+  vm <- readVarsFromBs "<input>" "lecture: \"Anwendungsentwicklung\"\npingoSession: \"230050\""
   let l = [("lecture", "Anwendungsentwicklung"), ("pingoSession", "230050")]
   assertEqual (VarMap (M.fromList l)) vm

@@ -35,15 +35,19 @@ testBuildConfig =
     }
 
 testBuildArgs :: BuildArgs
-testBuildArgs = BuildArgs {ba_inputFile = "sample.md",
-                           ba_verbose = False, ba_searchDir = "."}
+testBuildArgs =
+  BuildArgs
+    { ba_inputFile = "sample.md",
+      ba_verbose = False,
+      ba_searchDir = "."
+    }
 
 test_parseExternalLangConfig :: IO ()
 test_parseExternalLangConfig = do
   assertEqual (Right expected) (J.eitherDecode' (BSL.fromStrict $ T.encodeUtf8 sampleInput))
   where
     expected =
-      ExternalLangConfigs $
+      ExternalLangConfigs
         [ ExternalLangConfig
             { elc_name = "python-repl",
               elc_fileExt = ".py",

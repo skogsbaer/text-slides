@@ -1,4 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
 module Test.Parser
