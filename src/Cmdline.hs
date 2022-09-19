@@ -11,12 +11,13 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import Development.Shake
 import Options.Applicative
+import Data.Traversable
 import Types
 
 readOutputModes :: T.Text -> Maybe (S.Set OutputMode)
 readOutputModes t =
   let texts =
-        filter (\s -> s /= "") $
+        filter (/= "") $
           map T.strip $
             T.splitOn "," t
    in do
@@ -58,7 +59,7 @@ cmdlineOptsParser = do
           )
         <> value S.empty
   moreOutputs <-
-    flip traverse (S.toList allOutputModes) $ \mode -> do
+    for (S.toList allOutputModes) $ \mode -> do
       enable <-
         switch $
           long (T.unpack $ showOutputMode mode)

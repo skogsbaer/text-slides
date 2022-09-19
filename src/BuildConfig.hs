@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module BuildConfig
   ( computeBuildConfig, computeBuildArgs,
