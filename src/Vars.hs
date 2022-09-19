@@ -2,6 +2,7 @@ module Vars
   ( readVarsFile,
     readVarsFromBs,
     expandVars,
+    varCount,
     VarMap(..)
   )
 where
@@ -18,6 +19,9 @@ import qualified Data.ByteString as BS
 
 newtype VarMap = VarMap (M.Map T.Text T.Text)
   deriving (Eq, Show)
+
+varCount :: VarMap -> Int
+varCount (VarMap m) = M.size m
 
 instance J.FromJSON VarMap where
     parseJSON (J.Object v) = do

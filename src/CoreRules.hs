@@ -181,18 +181,28 @@ transformMarkdown warnFun cfg buildArgs pm inFile md = do
     pluginKindMap =
       flip M.map pm $ \(AnyPluginConfig plugin) -> p_kind plugin
 
+findVarFile :: FilePath -> Action (Maybe FilePath)
+findVarFile inputFile = do
+  let cands = [inputFile -<.> "yaml", "text-slides.yaml", "../text-slides.yaml"]
+  loop cands
+  where
+    loop [] = pure Nothing
+    loop (x:xs) = do
+      ex <- doesFileExist x
+      if ex then pure (Just x) else loop xs
+
 generateRawMarkdown :: BuildConfig -> BuildArgs -> FilePath -> FilePath -> Action ()
 generateRawMarkdown cfg args inFile outFile = do
   md' <- myReadFile inFile
-  let varsFile = ba_inputFile args -<.> "yaml"
-  varsFileExists <- doesFileExist varsFile
-  md <- case varsFileExists of
-    False -> do
-      info ("Variables file " ++ varsFile ++ " does not exist")
+  varsFile <- findVarFile (ba_inputFile args)
+  md <- case varsFile of
+    Nothing -> do
+      info "No variables file found"
       pure md'
-    True -> do
-      note ("Reading variables from " ++ varsFile)
-      vars <- readVarsFile varsFile
+    Just file -> do
+      note ("Reading variables from " ++ file)
+      vars <- readVarsFile file
+      note ("Found " ++ show (varCount vars) ++ " variables in " ++ file)
       pure (expandVars vars md')
   let pm = pluginMap cfg
   (rawMd, calls) <- transformMarkdown (warn . T.unpack) cfg args pm inFile md
