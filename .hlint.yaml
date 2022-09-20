@@ -47,3 +47,4 @@
 - ignore: {name: "Avoid lambda"}
 - ignore: {name: "Eta reduce"}
 - ignore: {name: "Move brackets to avoid $"}
+- ignore: {name: "Avoid lambda using `infix`"}
