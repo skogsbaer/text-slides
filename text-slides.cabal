@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a9ee8410a2423b06a0dc3e13a9a9dcd48f89bc99d523872d95b2dd0bbc088fd9
+-- hash: cc9da3b2ff0966bdd7fb477f0c7032ece3860df227ae9b112cdd2397156a8e11
 
 name:           text-slides
 version:        0.1
@@ -40,7 +40,8 @@ library
       Parser
       Plugins.AllPlugins
       Plugins.Code
-      Plugins.JavaCodePlugin
+      Plugins.CodeCommon
+      Plugins.JavaCode
       Plugins.Keynote
       Plugins.Mermaid
       RuleUtils
@@ -79,6 +80,7 @@ library
     , exceptions
     , extra
     , filepath
+    , language-java
     , megaparsec
     , optparse-applicative
     , process

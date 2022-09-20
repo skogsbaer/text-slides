@@ -1,3 +1,6 @@
 resolver: lts-16.31
 packages:
 - .
+extra-deps:
+  - git: https://github.com/skogsbaer/language-java.git
+    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95

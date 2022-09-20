@@ -27,6 +27,8 @@ import qualified Data.Text as T
 import Data.Time.Clock
 import Development.Shake
 import Logging
+import Plugins.CodeCommon
+import Plugins.JavaCode
 import System.FilePath
 import Types
 import Utils
@@ -168,107 +170,57 @@ runPlugin langCfg _cfg _buildArgs state call = do
           CodeModeHide -> ""
   return (result, nextState)
 
--- The text wrapped in the Code newtype may contain directives
--- such as `# ~~~hide`.
-data Code = Code
-  { c_payload :: T.Text
-  }
-  deriving (Eq, Show)
-
-data CodeExtract = CodeExtractFile | CodeExctractPresentation
-
-extractCode :: LangConfig -> CodeExtract -> Code -> T.Text
-extractCode lcfg mode (Code t) =
-  let lines = T.lines t
-      newLines = loop True lines []
-   in T.unlines newLines
-  where
-    loop _ [] acc = reverse acc
-    loop show (l : ls) acc =
-      case parseShowHide l of
-        Nothing ->
-          loop show ls (if show then l : acc else acc)
-        Just parsedShow ->
-          let newShow =
-                case mode of
-                  CodeExtractFile -> True
-                  CodeExctractPresentation -> parsedShow
-           in loop newShow ls acc
-    parseShowHide (T.stripEnd -> t) = do
-      t <- T.stripPrefix (lc_commentStart lcfg) t
-      t <- T.stripSuffix (fromMaybe "" (lc_commentEnd lcfg)) t
-      case T.strip t of
-        "~~~hide" -> pure False
-        "~~~show" -> pure True
-        _ -> Nothing
-
-data CollectedCode = CollectedCode
-  { cc_code :: Code,
-    cc_sectionName :: Maybe T.Text
-  }
-  deriving (Eq, Show)
-
-data CollectedCodeFile = CollectedCodeFile
-  { ccf_atStart :: [CollectedCode],
-    ccf_here :: [CollectedCode],
-    ccf_atEnd :: [CollectedCode]
-  }
-  deriving (Show)
-
-data CodeFilePath
-  = CodeFilePathCustom FilePath -- explicit file:NAME argument
-  | CodeFilePathDefault
-  deriving (Eq, Ord, Show)
-
 resolveCodeFilePath :: BuildArgs -> LangConfig -> CodeFilePath -> FilePath
 resolveCodeFilePath buildArgs langCfg cfp =
   let base =
         case cfp of
           CodeFilePathCustom fp -> fp
           CodeFilePathDefault ->
-            lc_makeDefaultFilename langCfg $
-              replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
+            replaceExtension (ba_inputFile buildArgs) (lc_fileExt langCfg)
    in pluginDir (PluginName (lc_name langCfg)) </> base
 
-type CodeMap = M.Map CodeFilePath CollectedCodeFile
+emptyCodeSnippetFile :: CodeSnippetFile
+emptyCodeSnippetFile = CodeSnippetFile [] [] []
 
-applyToCollectedCode ::
-  ([CollectedCode] -> [CollectedCode]) ->
-  CollectedCodeFile ->
-  CollectedCodeFile
-applyToCollectedCode fun x =
-  CollectedCodeFile
-    { ccf_atStart = fun (ccf_atStart x),
-      ccf_here = fun (ccf_here x),
-      ccf_atEnd = fun (ccf_atEnd x)
-    }
-
-emptyCollectedCodeFile :: CollectedCodeFile
-emptyCollectedCodeFile = CollectedCodeFile [] [] []
-
-mkCollectedCodeFile :: CollectedCode -> CodePlace -> CollectedCodeFile
-mkCollectedCodeFile cc place =
+mkCodeSnippetFile :: CodeSnippet -> CodePlace -> CodeSnippetFile
+mkCodeSnippetFile cc place =
   case place of
-    AtStart -> emptyCollectedCodeFile {ccf_atStart = [cc]}
-    Here -> emptyCollectedCodeFile {ccf_here = [cc]}
-    AtEnd -> emptyCollectedCodeFile {ccf_atEnd = [cc]}
+    AtStart -> emptyCodeSnippetFile {ccf_atStart = [cc]}
+    Here -> emptyCodeSnippetFile {ccf_here = [cc]}
+    AtEnd -> emptyCodeSnippetFile {ccf_atEnd = [cc]}
 
-appendCollectedCode :: CollectedCode -> CodePlace -> CollectedCodeFile -> CollectedCodeFile
-appendCollectedCode cc place file =
+appendCodeSnippet :: CodeSnippet -> CodePlace -> CodeSnippetFile -> CodeSnippetFile
+appendCodeSnippet cc place file =
   case place of
     AtStart -> file {ccf_atStart = cc : ccf_atStart file}
     Here -> file {ccf_here = cc : ccf_here file}
     AtEnd -> file {ccf_atEnd = cc : ccf_atEnd file}
 
+defaultProcessCodeMap ::
+  BuildConfig ->
+  BuildArgs ->
+  LangConfig ->
+  T.Text ->
+  M.Map CodeFilePath CodeSnippetFile ->
+  Action ()
+defaultProcessCodeMap _cfg buildArgs langCfg header codeMap =
+  forM_ (M.toList codeMap) $ \(codeFile, ccf) -> do
+    let file = resolveCodeFilePath buildArgs langCfg codeFile
+        code =
+          mkCode langCfg (ccf_atStart ccf)
+            <> mkCode langCfg (ccf_here ccf)
+            <> mkCode langCfg (ccf_atEnd ccf)
+    note ("Generating " ++ file)
+    myWriteFile file (header <> code)
+
 processAllCalls ::
   LangConfig -> BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
-processAllCalls langCfg _cfg buildArgs calls = do
+processAllCalls langCfg cfg buildArgs calls = do
   let allPlugins = Set.fromList (map pc_pluginName calls)
   forM_ allPlugins $ \pluginName -> do
     let dir = pluginDir pluginName
     liftIO $ removeAllFilesInDirectory dir `catch` (\(_ :: IOError) -> pure ())
   codeMap <- exceptInM $ collectCode calls
-  -- Java: transform code map here!
   time <- liftIO getCurrentTime
   let header =
         cmt
@@ -277,49 +229,29 @@ processAllCalls langCfg _cfg buildArgs calls = do
               <> showText time
               <> "\n\n"
           )
-  forM_ (M.toList codeMap) $ \(codeFile, ccf) -> do
-    let file = resolveCodeFilePath buildArgs langCfg codeFile
-        code =
-          mkCode (ccf_atStart ccf)
-            <> mkCode (ccf_here ccf)
-            <> mkCode (ccf_atEnd ccf)
-    lift $ note ("Generating " ++ file)
-    lift $ myWriteFile file (header <> code)
+  lift $ lc_processCodeMap langCfg cfg buildArgs langCfg header codeMap
   where
     cmt = lineComment langCfg
-    getCode = extractCode langCfg CodeExtractFile . cc_code
-    mkCode :: [CollectedCode] -> T.Text
-    mkCode code =
-      let groupedBySectionName =
-            L.groupBy (\x y -> cc_sectionName x == cc_sectionName y) code
-          newCode =
-            T.unlines $
-              flip concatMap groupedBySectionName $ \ccs ->
-                case ccs of
-                  [] -> []
-                  (cc : _) ->
-                    ( case cc_sectionName cc of
-                        Just x ->
-                          let line = T.replicate (T.length x) "-"
-                           in ["", "", cmt line, cmt x, cmt line]
-                        Nothing -> []
-                    )
-                      ++ map getCode ccs
-       in newCode
     collectCode :: [PluginCall] -> Fail CodeMap
     collectCode calls = do
       revMap <- foldM collectCode' M.empty calls
-      return $ M.map (applyToCollectedCode reverse) revMap
+      return $ M.map (applyToCodeSnippets reverse) revMap
     collectCode' :: CodeMap -> PluginCall -> Fail CodeMap
     collectCode' m call = do
       (file, mCode) <- codeFromCall call
       case mCode of
         Nothing -> return m
         Just (place, code) ->
-          let cc = CollectedCode code (pc_sectionName call)
+          let cc =
+                CodeSnippet
+                  { cc_code = code,
+                    cc_sectionName = pc_sectionName call,
+                    cc_location = pc_location call,
+                    cc_args = pc_args call
+                  }
            in case M.lookup file m of
-                Just ccf -> return $ M.insert file (appendCollectedCode cc place ccf) m
-                Nothing -> return $ M.insert file (mkCollectedCodeFile cc place) m
+                Just ccf -> return $ M.insert file (appendCodeSnippet cc place ccf) m
+                Nothing -> return $ M.insert file (mkCodeSnippetFile cc place) m
     codeFromCall :: PluginCall -> Fail (CodeFilePath, Maybe (CodePlace, Code))
     codeFromCall call = do
       args <- parseArgs call (lc_extraArgs langCfg)
@@ -343,142 +275,6 @@ processAllCalls langCfg _cfg buildArgs calls = do
       T.unlines $
         map (lineComment langCfg) $
           T.lines t
-
-data LangConfig = LangConfig
-  { lc_name :: T.Text,
-    lc_fileExt :: String,
-    lc_commentStart :: T.Text,
-    lc_commentEnd :: Maybe T.Text,
-    lc_makeDefaultFilename :: FilePath -> FilePath,
-    lc_extraArgs :: [T.Text]
-    -- lc_tagForCall :: PluginCall -> Fail (Maybe Tag),
-    -- lc_mkCodeForTags :: [(Tag, T.Text)] -> T.Text,
-    -- lc_rewriteLine :: T.Text -> T.Text
-  }
-
-mkLangConfig :: T.Text -> String -> T.Text -> Maybe T.Text -> LangConfig
-mkLangConfig name ext commentStart commentEnd =
-  LangConfig
-    { lc_name = name,
-      lc_fileExt = ext,
-      lc_commentStart = commentStart,
-      lc_commentEnd = commentEnd,
-      lc_makeDefaultFilename = id,
-      lc_extraArgs = []
-      --lc_tagForCall = const (Right Nothing),
-      --lc_mkCodeForTags = const "",
-      --lc_rewriteLine = id
-    }
-
-{-
--- The input list may contain several entries for the same tag, the output list
--- contains at most one entry for the same tag (the content is concatenated).
-groupByTag :: [(Tag, T.Text)] -> [(Tag, T.Text)]
-groupByTag l =
-  let m = M.fromListWith (\old new -> old <> "\n" <> new) l
-   in loop Set.empty m l []
-  where
-    loop :: Set.Set Tag -> M.Map Tag T.Text -> [(Tag, T.Text)] -> [(Tag, T.Text)] -> [(Tag, T.Text)]
-    loop _ _ [] acc = reverse acc
-    loop handled m ((tag, _) : rest) acc =
-      if tag `Set.member` handled
-        then loop handled m rest acc
-        else
-          loop
-            (Set.insert tag handled)
-            m
-            rest
-            ( (tag, (fromJustNote ("expected tag " ++ show tag ++ " in map") $ M.lookup tag m)) :
-              acc
-            )
--}
-
-{-
-javaLangConfig :: LangConfig
-javaLangConfig = (mkLangConfig ".java" "// " Nothing)
-  { lc_makeDefaultFilename = \fp ->
-      let replace c =
-            case c of
-              '-' -> '_'
-              _ -> c
-      in takeDirectory fp </> "__Class_" ++ map replace (takeFileName fp)
-  , lc_extraArgs = ["method", "body", "static", "test"]
-  , lc_tagForCall = \call -> do
-      let loc = pc_location call
-          m = pc_args call
-      method <- fromMaybe False <$> getOptionalBoolValue loc "method" m
-      body <- tagForArg "body" m call
-      test <- tagForArg "test" m call
-      let onlyOne = Left (unLocation loc <> ": at most one of method, body, and test allowed")
-      case (method, body, test) of
-        (False, Just body, Nothing) -> Right (Just body)
-        (False, Nothing, Just test) -> Right (Just test)
-        (True, Nothing, Nothing) -> Right (Just (methodTag (hash call)))
-        (False, Nothing, Nothing) -> Right Nothing
-        (True, _, Just _) -> onlyOne
-        (True, Just _, _) -> onlyOne
-        (_, Just _, Just _) -> onlyOne
-  , lc_mkCodeForTags = \m' ->
-      let m = groupByTag m'
-          methods = map snd $ filter (\(t, _) -> t_kind t == "method") m
-          bodiesOrTests k = map (Data.Bifunctor.first t_id) $ filter (\(t, _) -> t_kind t == k) m
-          bodies = bodiesOrTests "body"
-          tests = bodiesOrTests "test"
-          methodsForBodies = flip map bodies $ \(id, code) ->
-            "public static void __body_" <> id <> "() throws Exception {\n" <> code <> "\n}"
-          methodsForTests = flip map tests $ \(id, code) ->
-            "@Test public void __body_" <> id <> "() throws Exception {\n" <> code <> "\n}"
-          allMethods = methods ++ methodsForBodies ++ methodsForTests
-      in if null allMethods
-            then ""
-            else let code = T.concat (L.intersperse "\n\n" allMethods)
-                 in "class __CodeContainer {\n" <> code <> "\n}"
-  , lc_rewriteLine = rewrite
-  }
-  where
-    methodTag = Tag "method"
-    hash c = unHash (md5OfText (unLocation (pc_location c)))
-    tagForArg arg m call = do
-      case M.lookup arg m of
-        Nothing -> pure Nothing
-        Just (ArgString t) -> pure $ Just (Tag arg t)
-        Just (ArgInt i) -> pure $ Just (Tag arg (showText i))
-        Just (ArgBool True) -> pure $ Just (Tag arg (hash call))
-        Just (ArgBool False) -> pure Nothing
-    methodReturnType line =
-      let ws = T.words (T.strip line)
-          isKw x = x `elem` ["public", "private", "protected", "final", "abstract", "static"]
-      in case filter (not . isKw) ws of
-           [] -> Nothing
-           l ->
-             case T.words (T.pack (dropTyArgs 0 (T.unpack (T.unwords l)))) of
-               [] -> Nothing
-               (x:_) -> Just x
-    dropTyArgs i ('<':rest) = dropTyArgs (i+1) rest
-    dropTyArgs i ('>':rest) = dropTyArgs (i-1) rest
-    dropTyArgs 0 s = s
-    dropTyArgs i (_:rest) = dropTyArgs i rest
-    dropTyArgs _ [] = []
-    rewrite line =
-      case methodReturnType line of
-        Nothing -> line
-        Just ty ->
-          let repl =
-                case ty of
-                  "void" -> "{ }"
-                  "boolean" -> "{ return false; }"
-                  "int" -> "{ return 0; }"
-                  "short" -> "{ return 0; }"
-                  "byte" -> "{ return 0; }"
-                  "long" -> "{ return 0L; }"
-                  "double" -> "{ return 0.0; }"
-                  "float" -> "{ return 0.0f; }"
-                  "char" -> "{ return '\\0'; }"
-                  _ -> "{ return null; }"
-          in T.replace "{ ... }" repl (T.replace "{...}" repl line)
--}
-lineComment :: LangConfig -> T.Text -> T.Text
-lineComment cfg t = lc_commentStart cfg <> t <> fromMaybe "" (lc_commentEnd cfg)
 
 codePlugins :: [ExternalLangConfig] -> [AnyPluginConfig Action]
 codePlugins externalLangs =
@@ -506,27 +302,32 @@ codePlugins externalLangs =
           lc_commentEnd = elc_commentEnd ext
         }
     languageFromExternal cfg =
-      mkLangConfig (elc_name cfg) (elc_fileExt cfg) (elc_commentStart cfg) (elc_commentEnd cfg)
+      mkLangConfig
+        (elc_name cfg)
+        (elc_fileExt cfg)
+        (elc_commentStart cfg)
+        (elc_commentEnd cfg)
+        defaultProcessCodeMap
 
 languages :: [LangConfig]
 languages =
-  [ mkLangConfig "bash" ".sh" "# " Nothing,
-    mkLangConfig "c" ".c" "// " Nothing,
-    mkLangConfig "cs" ".cs" "// " Nothing,
-    mkLangConfig "css" ".css" "// " Nothing,
-    mkLangConfig "clojure" ".clj" ";; " Nothing,
-    mkLangConfig "erlang" ".erl" "% " Nothing,
-    mkLangConfig "fsharp" ".fs" "// " Nothing,
-    mkLangConfig "html" ".html" "<!-- " (Just " -->"),
-    mkLangConfig "haskell" ".hs" "-- " Nothing,
-    mkLangConfig "json" ".json" "// " Nothing,
-    -- ("java", javaLangConfig,
-    mkLangConfig "javascript" ".js" "// " Nothing,
-    mkLangConfig "typescript" ".ts" "// " Nothing,
-    mkLangConfig "ocaml" ".ml" "(* " (Just " *"),
-    mkLangConfig "objectivec" ".m" "// " Nothing,
-    mkLangConfig "python" ".py" "# " Nothing,
-    mkLangConfig "rust" ".rs" "// " Nothing,
-    mkLangConfig "scheme" ".sc" ";; " Nothing,
-    mkLangConfig "xml" ".xml" "<!-- " (Just " -->")
+  [ mkLangConfig "bash" ".sh" "# " Nothing defaultProcessCodeMap,
+    mkLangConfig "c" ".c" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "cs" ".cs" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "css" ".css" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "clojure" ".clj" ";; " Nothing defaultProcessCodeMap,
+    mkLangConfig "erlang" ".erl" "% " Nothing defaultProcessCodeMap,
+    mkLangConfig "fsharp" ".fs" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "html" ".html" "<!-- " (Just " -->") defaultProcessCodeMap,
+    mkLangConfig "haskell" ".hs" "-- " Nothing defaultProcessCodeMap,
+    mkLangConfig "json" ".json" "// " Nothing defaultProcessCodeMap,
+    javaLangConfig,
+    mkLangConfig "javascript" ".js" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "typescript" ".ts" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "ocaml" ".ml" "(* " (Just " *") defaultProcessCodeMap,
+    mkLangConfig "objectivec" ".m" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "python" ".py" "# " Nothing defaultProcessCodeMap,
+    mkLangConfig "rust" ".rs" "// " Nothing defaultProcessCodeMap,
+    mkLangConfig "scheme" ".sc" ";; " Nothing defaultProcessCodeMap,
+    mkLangConfig "xml" ".xml" "<!-- " (Just " -->") defaultProcessCodeMap
   ]

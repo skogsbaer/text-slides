@@ -3,7 +3,18 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    name: language-java
+    version: 0.2.9
+    git: https://github.com/skogsbaer/language-java.git
+    pantry-tree:
+      size: 4415
+      sha256: 1d0eb60e80e48bf10c180e3d9e37a58092f7e8add5418268131de722c9e44994
+    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95
+  original:
+    git: https://github.com/skogsbaer/language-java.git
+    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95
 snapshots:
 - completed:
     size: 534126

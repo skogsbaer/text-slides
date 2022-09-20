@@ -29,6 +29,7 @@ library:
     - exceptions
     - extra
     - filepath
+    - language-java
     - megaparsec
     - optparse-applicative
     - process
