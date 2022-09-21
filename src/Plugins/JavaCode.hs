@@ -84,10 +84,10 @@ STEP 4: Each (remaining) snippet gets a version number V. This is just the posit
 
 STEP 5: For each snippet, the plugin first tries to extract the package name P and the name of
   the main class C from the snippet. The main class is determined as follows (first match is used):
-  * First public class with a main-method
-  * First public class without a main-method
+  * First public class
   * First non-public class with a main-method
-  * First non-public class without a main-method
+
+  If no main class is found, the name 'Main' is assumed.
 
 STEP 6: Each snippets gets an ID, determined as follows:
   1. If the snippets has P and C, the ID is P/C.
@@ -130,7 +130,7 @@ STEP 7: The content of each snippet with an implicit ID is updated. Note that su
   Snippets with lower versions numbers are handled first, so that the updated content is used when
   handling higher versions.
   * CASE nested, i.e. the code contains only methods. The plugin tries to find methods with
-    the same signature in the toplevel declarations of the preceding snippet.
+    the same name in the toplevel declarations of the preceding snippet.
     - If it finds such a method, the new content of the snippet is the content of the preceding
       snippet with the method being updated.
     - If no such method exists, the new content of the snippet is the content of the preceding
@@ -269,6 +269,13 @@ parseJavaOrMembers = undefined
 findMainClass :: [TypeDecl] -> Maybe ClassDecl
 findMainClass = undefined
 
+classDeclIdent :: ClassDecl -> Ident
+classDeclIdent d =
+  case d of
+    ClassDecl _ className _ _ _ _ -> className
+    RecordDecl _ recName _ _ _ _ -> recName
+    EnumDecl _ enumName _ _ -> enumName
+
 identToText :: Ident -> T.Text
 identToText = undefined
 
@@ -284,11 +291,10 @@ mergedSnippetToJSnippet version mPrevId key ms = do
       testCode = map snippetsToText (ms_testSnippets ms)
   let mPkgId =
         case parseJava baseCode of
-          Just (CompilationUnit mPkg _ decls) -> do
-            case (mPkg, findMainClass decls) of
-              (Just (PackageDecl pkg), Just (ClassDecl _ className _ _ _ _)) ->
-                Just $ JSnippetIdPkgClass (nameToText pkg) (identToText className)
-              _ -> Nothing
+          Just (CompilationUnit (Just (PackageDecl pkg)) _ decls) -> do
+            let className =
+                  fromMaybe "Main" (fmap (identToText . classDeclIdent) (findMainClass decls))
+            Just $ JSnippetIdPkgClass (nameToText pkg) className
           _ -> Nothing
   let (idKind, id) =
         case mPkgId of
