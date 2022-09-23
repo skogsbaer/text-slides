@@ -202,8 +202,9 @@ defaultProcessCodeMap ::
   LangConfig ->
   T.Text ->
   M.Map CodeFilePath CodeSnippetFile ->
+  [CodeSnippet] ->
   Action ()
-defaultProcessCodeMap _cfg buildArgs langCfg header codeMap =
+defaultProcessCodeMap _cfg buildArgs langCfg header codeMap _allSnippets =
   forM_ (M.toList codeMap) $ \(codeFile, ccf) -> do
     let file = resolveCodeFilePath buildArgs langCfg codeFile
         code =
@@ -220,7 +221,7 @@ processAllCalls langCfg cfg buildArgs calls = do
   forM_ allPlugins $ \pluginName -> do
     let dir = pluginDir pluginName
     liftIO $ removeAllFilesInDirectory dir `catch` (\(_ :: IOError) -> pure ())
-  codeMap <- exceptInM $ collectCode calls
+  (codeMap, snippets) <- exceptInM $ collectCode calls
   time <- liftIO getCurrentTime
   let header =
         cmt
@@ -229,18 +230,18 @@ processAllCalls langCfg cfg buildArgs calls = do
               <> showText time
               <> "\n\n"
           )
-  lift $ lc_processCodeMap langCfg cfg buildArgs langCfg header codeMap
+  lift $ lc_processCodeMap langCfg cfg buildArgs langCfg header codeMap snippets
   where
     cmt = lineComment langCfg
-    collectCode :: [PluginCall] -> Fail CodeMap
+    collectCode :: [PluginCall] -> Fail (CodeMap, [CodeSnippet])
     collectCode calls = do
-      revMap <- foldM collectCode' M.empty calls
-      return $ M.map (applyToCodeSnippets reverse) revMap
-    collectCode' :: CodeMap -> PluginCall -> Fail CodeMap
-    collectCode' m call = do
+      (revMap, revList) <- foldM collectCode' (M.empty, []) calls
+      return (M.map (applyToCodeSnippets reverse) revMap, reverse revList)
+    collectCode' :: (CodeMap, [CodeSnippet]) -> PluginCall -> Fail (CodeMap, [CodeSnippet])
+    collectCode' (m, l) call = do
       (file, mCode) <- codeFromCall call
       case mCode of
-        Nothing -> return m
+        Nothing -> return (m, l)
         Just (place, code) ->
           let cc =
                 CodeSnippet
@@ -250,8 +251,8 @@ processAllCalls langCfg cfg buildArgs calls = do
                     cc_args = pc_args call
                   }
            in case M.lookup file m of
-                Just ccf -> return $ M.insert file (appendCodeSnippet cc place ccf) m
-                Nothing -> return $ M.insert file (mkCodeSnippetFile cc place) m
+                Just ccf -> return (M.insert file (appendCodeSnippet cc place ccf) m, cc : l)
+                Nothing -> return (M.insert file (mkCodeSnippetFile cc place) m, cc : l)
     codeFromCall :: PluginCall -> Fail (CodeFilePath, Maybe (CodePlace, Code))
     codeFromCall call = do
       args <- parseArgs call (lc_extraArgs langCfg)

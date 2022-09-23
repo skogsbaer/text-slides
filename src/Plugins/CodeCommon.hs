@@ -73,7 +73,14 @@ applyToCodeSnippetM ::
   m CodeSnippetFile
 applyToCodeSnippetM fun = applyToCodeSnippetsM (mapM fun)
 
-type ProcessCodeMap = BuildConfig -> BuildArgs -> LangConfig -> T.Text -> CodeMap -> Action ()
+type ProcessCodeMap =
+  BuildConfig ->
+  BuildArgs ->
+  LangConfig ->
+  T.Text ->
+  CodeMap ->
+  [CodeSnippet] ->
+  Action ()
 
 data LangConfig = LangConfig
   { lc_name :: T.Text,

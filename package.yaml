@@ -78,6 +78,7 @@ tests:
       - heredoc
       - HTF
       - safe
+      - temporary
       - text-slides
       - text
       - transformers

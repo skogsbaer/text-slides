@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf #-}
 
-module Driver (main) where
+module Driver (main, mainWithOpts) where
 
 import BuildConfig
 import Cmdline
@@ -49,6 +49,10 @@ cleanupShakeFiles shakeDir curVersion = do
 main :: IO ()
 main = do
   opts <- parseCmdlineArgs
+  mainWithOpts opts
+
+mainWithOpts :: CmdlineOpts -> IO ()
+mainWithOpts opts = do
   args <- computeBuildArgs opts
   let logLevel =
         if

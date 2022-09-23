@@ -10,11 +10,11 @@ packages:
     git: https://github.com/skogsbaer/language-java.git
     pantry-tree:
       size: 4415
-      sha256: 1d0eb60e80e48bf10c180e3d9e37a58092f7e8add5418268131de722c9e44994
-    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95
+      sha256: 0f52c91cd0a420230a9efb3d41c657d146318d3a6c317ec1c07a05a16459c929
+    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af
   original:
     git: https://github.com/skogsbaer/language-java.git
-    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95
+    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af
 snapshots:
 - completed:
     size: 534126

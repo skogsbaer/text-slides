@@ -1,17 +1,27 @@
 module Plugins.JavaCode (javaLangConfig) where
 
+{-
+
+Next steps:
+
+- Implement test for java plugin
+- Implement missing pieces of the java plugin
+- Test the java plugin
+- Make sure that the tests of the lectures AKI_Prog_Java and AdvancedProg are working
+
+-}
+
 import Control.Monad
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import Development.Shake (Action)
 import Language.Java.Parser
-import Language.Java.Syntax
+import Language.Java.Syntax hiding (Location)
+-- import qualified Language.Java.Syntax as J
 import Logging (note)
 import Plugins.CodeCommon
-import System.Directory
 import System.FilePath
 import Types
 import Utils
@@ -85,12 +95,13 @@ STEP 4: Each (remaining) snippet gets a version number V. This is just the posit
 STEP 5: For each snippet, the plugin first tries to extract the package name P and the name of
   the main class C from the snippet. The main class is determined as follows (first match is used):
   * First public class
-  * First non-public class with a main-method
+  * First non-public class
 
   If no main class is found, the name 'Main' is assumed.
 
 STEP 6: Each snippets gets an ID, determined as follows:
   1. If the snippets has P and C, the ID is P/C.
+  2. If the snippet has P but no C, the ID is P.
   2. If the snippets does not have P and C, the ID is
      a. the ID of the preceeding snippets if there is such a snippet.
      b. the key of the snippet otherwise.
@@ -101,6 +112,7 @@ After step 6, we have a list of type [JSnippet] for each key K.
 
 data JSnippetId
   = JSnippetIdPkgClass T.Text T.Text
+  | JSnippetIdPkg T.Text
   | JSnippetIdKey CodeFilePath
   deriving (Eq, Show)
 
@@ -142,9 +154,19 @@ STEP 7: The content of each snippet with an implicit ID is updated. Note that su
      - declarations that do not existing in the preceding snippet are appended.
   Steps 6 and 7 requires parsing of Java code.
 
-STEP 8: Each snippet is written to file K/V/ID.java. The snippets with place:"atStart" and
+STEP 8: Each snippet is written to some file. The snippets with place:"atStart" and
   place:"atEnd" for key K are prepended/appended to each file. Method, test and bodies snippets
   are place inside class __CodeContainer in the same file.
+
+  The file name is determined as follows:
+
+  - If ID is of the form P/C, the filename is P/V/C.java
+  - If ID is of the form P, the filename is P/V/Main.java
+  - If the ID is of the form K and K is the default, the filename is default/V/_Main.java.
+  - If the ID is of the form K and K is not the default, the filename is K/V/_Main.java.
+
+In addition, all snippets are written unchanged to file INPUT_FILE.java (to enable copy&paste).
+
 -}
 
 -- STEP 1
@@ -210,7 +232,7 @@ append snips = loop Nothing snips
 
 data SnippetKind
   = SnippetKindRegular
-  | SnippedKindBody
+  | SnippetKindBody
   | SnippetKindMethod
   | SnippetKindTest T.Text
   deriving (Eq, Show)
@@ -222,12 +244,24 @@ addToMergedSnippet :: SnippetKind -> [CodeSnippet] -> MergedSnippet -> MergedSni
 addToMergedSnippet k snips ms =
   case k of
     SnippetKindRegular -> ms {ms_baseSnippets = ms_baseSnippets ms ++ snips}
-    SnippedKindBody -> ms {ms_bodySnippets = ms_bodySnippets ms ++ [snips]}
+    SnippetKindBody -> ms {ms_bodySnippets = ms_bodySnippets ms ++ [snips]}
     SnippetKindMethod -> ms {ms_methodSnippets = ms_methodSnippets ms ++ [snips]}
     SnippetKindTest _ -> ms {ms_testSnippets = ms_testSnippets ms ++ [snips]}
 
 snippetKind :: CodeSnippet -> Fail SnippetKind
-snippetKind = undefined
+snippetKind cs = do
+  m <- get "method"
+  b <- get "body"
+  t <- getOptionalStringValue loc "test" (cc_args cs)
+  case (m, b, t) of
+    (True, False, Nothing) -> pure SnippetKindMethod
+    (False, True, Nothing) -> pure SnippetKindBody
+    (False, False, Just t) -> pure (SnippetKindTest t)
+    (False, False, Nothing) -> pure SnippetKindRegular
+    _ -> Left "Can have only one of the arguments method, body, and test"
+  where
+    loc = cc_location cs
+    get k = fromMaybe False <$> getOptionalBoolValue loc k (cc_args cs)
 
 merge :: [[CodeSnippet]] -> Fail [MergedSnippet]
 merge xss = loop Nothing xss
@@ -258,10 +292,14 @@ snippetsToText :: [CodeSnippet] -> T.Text
 snippetsToText = mkCode javaLangConfig
 
 parseJava :: T.Text -> Maybe CompilationUnit
-parseJava = undefined
+parseJava code =
+  -- should we fail here? Swallowing errors is ugly
+  case parserWithMode ParseShallow compilationUnit "<input>" (T.unpack code) of
+    Left err -> putStrLn (fp ++ ": ERROR: " ++ show err)
+    Right x -> return ()
 
-parseMembers :: T.Text -> Maybe [MemberDecl]
-parseMembers = undefined
+_parseMembers :: T.Text -> Maybe [MemberDecl]
+_parseMembers = undefined
 
 parseJavaOrMembers :: T.Text -> Maybe (Either CompilationUnit [MemberDecl])
 parseJavaOrMembers = undefined
@@ -272,9 +310,9 @@ findMainClass = undefined
 classDeclIdent :: ClassDecl -> Ident
 classDeclIdent d =
   case d of
-    ClassDecl _ className _ _ _ _ -> className
-    RecordDecl _ recName _ _ _ _ -> recName
-    EnumDecl _ enumName _ _ -> enumName
+    ClassDecl _ _ className _ _ _ _ -> className
+    RecordDecl _ _ recName _ _ _ _ -> recName
+    EnumDecl _ _ enumName _ _ -> enumName
 
 identToText :: Ident -> T.Text
 identToText = undefined
@@ -292,9 +330,9 @@ mergedSnippetToJSnippet version mPrevId key ms = do
   let mPkgId =
         case parseJava baseCode of
           Just (CompilationUnit (Just (PackageDecl pkg)) _ decls) -> do
-            let className =
-                  fromMaybe "Main" (fmap (identToText . classDeclIdent) (findMainClass decls))
-            Just $ JSnippetIdPkgClass (nameToText pkg) className
+            case fmap (identToText . classDeclIdent) (findMainClass decls) of
+              Just className -> Just $ JSnippetIdPkgClass (nameToText pkg) className
+              Nothing -> Just $ JSnippetIdPkg (nameToText pkg)
           _ -> Nothing
   let (idKind, id) =
         case mPkgId of
@@ -340,10 +378,10 @@ formatLocations :: [Location] -> T.Text
 formatLocations = undefined
 
 mergeCu :: JSnippet -> CompilationUnit -> JSnippet -> CompilationUnit -> JSnippet
-mergeCu prevSnip prevCu snip cu = undefined
+mergeCu _prevSnip _prevCu _snip _cu = undefined
 
 mergeMembers :: JSnippet -> CompilationUnit -> JSnippet -> [MemberDecl] -> JSnippet
-mergeMembers prevSnip prevCu snip methods = undefined
+mergeMembers _prevSnip _prevCu _snip _methods = undefined
 
 updateSnippetContent :: Maybe JSnippet -> JSnippet -> Fail JSnippet
 updateSnippetContent mPrevSnip snip =
@@ -421,47 +459,38 @@ jsnippetCode start snip end =
               let code = T.concat (L.intersperse "\n\n" allMethods)
                in "class __CodeContainer {\n" <> code <> "\n}"
 
-codeFilePathToDir :: FilePath -> CodeFilePath -> FilePath
-codeFilePathToDir inputFile k =
-  case k of
-    CodeFilePathCustom fp -> dropExtension fp
-    CodeFilePathDefault ->
-      let replace c =
-            case c of
-              '-' -> '_'
-              _ -> c
-       in takeDirectory inputFile
-            </> ("__Class_" ++ map replace (dropExtension (takeFileName inputFile)))
-
 outputJSnippet :: BuildArgs -> T.Text -> [CodeSnippet] -> JSnippet -> [CodeSnippet] -> Action ()
-outputJSnippet buildArgs header start snip end = do
+outputJSnippet _buildArgs header start snip end = do
   let code = jsnippetCode start snip end
-      keyDir = codeFilePathToDir (ba_inputFile buildArgs) (js_key snip)
       version = unVersion (js_version snip)
       versionDir =
         "v" ++ (if version < 10 then "0" else "") ++ show version
-      idFile =
+      file =
         case js_id snip of
-          JSnippetIdPkgClass pkg cls ->
-            replaceDots (T.unpack pkg) </> replaceDots (T.unpack cls)
-          JSnippetIdKey key ->
-            codeFilePathToDir (ba_inputFile buildArgs) key
-      fullFile = keyDir </> versionDir </> (idFile <.> "java")
-  note ("Generating " ++ fullFile)
-  myWriteFile fullFile (header <> code)
-  where
-    replaceDots s =
-      let replace c =
-            case c of
-              '.' -> '/'
-              _ -> c
-       in map replace s
+          JSnippetIdPkgClass (T.unpack -> pkg) (T.unpack -> cls) ->
+            pkg </> versionDir </> (cls <.> "java")
+          JSnippetIdPkg (T.unpack -> pkg) -> pkg </> versionDir </> ("Main.java")
+          JSnippetIdKey CodeFilePathDefault -> "default" </> versionDir </> "Main.java"
+          JSnippetIdKey (CodeFilePathCustom fp) -> "default" </> versionDir </> fp
+  note ("Generating " ++ file)
+  myWriteFile file (header <> code)
 
-processCodeMap :: BuildConfig -> BuildArgs -> LangConfig -> T.Text -> CodeMap -> Action ()
-processCodeMap _buildCfg buildArgs _langCfg header cm =
+processCodeMap ::
+  BuildConfig ->
+  BuildArgs ->
+  LangConfig ->
+  T.Text ->
+  CodeMap ->
+  [CodeSnippet] ->
+  Action ()
+processCodeMap _buildCfg buildArgs _langCfg header cm snippets = do
   forM_ (M.toList cm) $ \(k, ccf) -> do
     jSnippets <- failInM $ processSnippets k (ccf_here ccf)
-    forM_ jSnippets $ \snip -> outputJSnippet buildArgs header (ccf_atStart ccf) snip (ccf_atEnd ccf)
+    forM_ jSnippets $ \snip ->
+      outputJSnippet buildArgs header (ccf_atStart ccf) snip (ccf_atEnd ccf)
+  let fullCode = header <> snippetsToText snippets
+      file = takeBaseName (ba_inputFile buildArgs) <.> "java"
+  myWriteFile file fullCode
 
 javaLangConfig :: LangConfig
 javaLangConfig =

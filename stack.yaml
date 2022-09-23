@@ -3,4 +3,4 @@ packages:
 - .
 extra-deps:
   - git: https://github.com/skogsbaer/language-java.git
-    commit: eb6b85293c7add994bcb7fe7dfb8936053bb6a95
+    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: cc9da3b2ff0966bdd7fb477f0c7032ece3860df227ae9b112cdd2397156a8e11
+-- hash: 2588ca9ea027374659c63168f7d38e948d2d12fce1918a57ea3acf53d0f6a334
 
 name:           text-slides
 version:        0.1
@@ -129,6 +129,7 @@ test-suite unit-tests
   type: exitcode-stdio-1.0
   main-is: Tests.hs
   other-modules:
+      Test.External
       Test.Keynote
       Test.Parser
       Test.TestBuildConfig
@@ -166,6 +167,7 @@ test-suite unit-tests
     , filepath
     , heredoc
     , safe
+    , temporary
     , text
     , text-slides
     , transformers

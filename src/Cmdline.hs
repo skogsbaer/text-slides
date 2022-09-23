@@ -3,15 +3,16 @@
 
 module Cmdline
   ( CmdlineOpts (..),
+    emptyCmdlineOpts,
     parseCmdlineArgs,
   )
 where
 
 import qualified Data.Set as S
 import qualified Data.Text as T
+import Data.Traversable
 import Development.Shake
 import Options.Applicative
-import Data.Traversable
 import Types
 
 readOutputModes :: T.Text -> Maybe (S.Set OutputMode)
@@ -44,6 +45,24 @@ data CmdlineOpts = CmdlineOpts
     co_jobs :: !Int
   }
   deriving (Eq, Show)
+
+emptyCmdlineOpts :: CmdlineOpts
+emptyCmdlineOpts =
+  CmdlineOpts
+    { co_inputFile = Nothing,
+      co_beamerHeader = Nothing,
+      co_htmlHeader = Nothing,
+      co_luaFilter = Nothing,
+      co_mermaidConfig = Nothing,
+      co_syntaxTheme = Nothing,
+      co_outputs = S.empty,
+      co_debug = False,
+      co_verbose = False,
+      co_quiet = False,
+      co_shakeVerbosity = minBound,
+      co_shakeProfile = False,
+      co_jobs = 1
+    }
 
 cmdlineOptsParser :: Parser CmdlineOpts
 cmdlineOptsParser = do
