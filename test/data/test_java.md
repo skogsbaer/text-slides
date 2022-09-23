@@ -144,3 +144,9 @@ class C1{}
 ~~~java(file:"alternative")
 class C2{}
 ~~~
+
+clear:true starts from scratch
+
+~~~java(file:"alternative", clear:true)
+class C3{}
+~~~
