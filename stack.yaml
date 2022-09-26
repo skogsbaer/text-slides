@@ -1,5 +1,4 @@
-resolver: lts-16.31
-# resolver: nightly-2022-09-26
+resolver: nightly-2022-09-26
 packages:
 - .
 extra-deps:

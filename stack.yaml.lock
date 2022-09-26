@@ -17,7 +17,7 @@ packages:
     git: /Users/swehr/devel/language-java
 snapshots:
 - completed:
-    sha256: 637fb77049b25560622a224845b7acfe81a09fdb6a96a3c75997a10b651667f6
-    size: 534126
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/31.yaml
-  original: lts-16.31
+    sha256: e8d2623ddf31a11ece3e72633c0b7db97a4dfb93b8c44ab760913bebfd2cf2c4
+    size: 636751
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2022/9/26.yaml
+  original: nightly-2022-09-26

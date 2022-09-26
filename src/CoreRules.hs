@@ -13,7 +13,7 @@ where
 import Control.Monad
 import Control.Monad.Trans.Except
 import qualified Data.Aeson as J
-import qualified Data.HashMap.Strict as Hm
+import qualified Data.Aeson.KeyMap as Km
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
@@ -23,12 +23,12 @@ import Development.Shake
 import LatexRules
 import Logging
 import Parser
+import Plugins.AllPlugins
 import RuleUtils
 import System.FilePath
 import Types
 import Utils
 import Vars
-import Plugins.AllPlugins
 
 getDependenciesFromPandocJson :: FilePath -> IO [FilePath]
 getDependenciesFromPandocJson inFile = do
@@ -46,12 +46,12 @@ getDependenciesFromPandocJson inFile = do
     extractDeps val acc =
       case val of
         J.Object hm ->
-          case (Hm.lookup "t" hm, Hm.lookup "c" hm) of
+          case (Km.lookup "t" hm, Km.lookup "c" hm) of
             (Just "Image", Just (J.Array args)) ->
               case getDepFromImageArgs args of
                 Just t -> S.insert t acc
                 Nothing -> acc
-            _ -> foldr extractDeps acc (Hm.elems hm)
+            _ -> foldr extractDeps acc (Km.elems hm)
         J.Array values -> foldr extractDeps acc (V.toList values)
         _ -> acc
     getDepFromImageArgs :: V.Vector J.Value -> Maybe FilePath
