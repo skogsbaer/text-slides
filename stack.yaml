@@ -1,6 +1,8 @@
 resolver: lts-16.31
+# resolver: nightly-2022-09-26
 packages:
 - .
 extra-deps:
-  - git: https://github.com/skogsbaer/language-java.git
-    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af
+  #- git: https://github.com/skogsbaer/language-java.git
+  - git: /Users/swehr/devel/language-java
+    commit: 2c58680189f50c3117537bd90b302236b36c5874

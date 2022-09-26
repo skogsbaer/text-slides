@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2588ca9ea027374659c63168f7d38e948d2d12fce1918a57ea3acf53d0f6a334
+-- hash: 5b74d0d3710e6dab52a877bea9df5ba6b1ac817d0958a14dae9b950d376ec9b6
 
 name:           text-slides
 version:        0.1
@@ -83,6 +83,7 @@ library
     , language-java
     , megaparsec
     , optparse-applicative
+    , parsec
     , process
     , process-extras
     , safe
@@ -130,10 +131,12 @@ test-suite unit-tests
   main-is: Tests.hs
   other-modules:
       Test.External
+      Test.JavaCode
       Test.Keynote
       Test.Parser
       Test.TestBuildConfig
       Test.Transform
+      Test.Utils
       Test.Vars
       Paths_text_slides
   hs-source-dirs:
@@ -166,6 +169,7 @@ test-suite unit-tests
     , extra
     , filepath
     , heredoc
+    , language-java
     , safe
     , temporary
     , text

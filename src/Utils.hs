@@ -1,13 +1,15 @@
 module Utils where
 
 import Control.Exception
+import Control.Monad (forM_)
 import Control.Monad.IO.Class
-import Data.Bifunctor
 import qualified Crypto.Hash.MD5 as MD5
+import Data.Bifunctor
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.List as L
 import qualified Data.Map as M
+import Data.Maybe
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock
@@ -19,8 +21,6 @@ import System.FilePath
 import System.IO
 import System.Process
 import Text.Printf
-import Data.Maybe
-import Control.Monad (forM_)
 
 withTiming :: MonadIO m => m a -> m (Double, a)
 withTiming action = do
@@ -61,9 +61,9 @@ mySystem ll output prog args mEnv = do
           let myEnv = flip fmap mEnv $ \m -> map (bimap T.unpack T.unpack) $ M.toList m
               process =
                 let p = (proc prog args) {env = myEnv}
-                in case output of
-                     PrintStdout -> p
-                     DontPrintStdout -> p {std_out = UseHandle devNull}
+                 in case output of
+                      PrintStdout -> p
+                      DontPrintStdout -> p {std_out = UseHandle devNull}
           (_, _, _, p) <- createProcess process
           waitForProcess p
   case res of
@@ -166,11 +166,32 @@ markdownImage path (width, height) center =
           ] of
           [] -> ""
           l -> "{" <> T.intercalate " " l <> "}"
-  in "![](" <> T.pack path <> ")" <> attrs
+   in "![](" <> T.pack path <> ")" <> attrs
 
 removeAllFilesInDirectory :: FilePath -> IO ()
 removeAllFilesInDirectory path = do
-  cs <- map (path </>) <$> (listDirectory path `catch` (\(_::IOError) -> pure []))
+  cs <- map (path </>) <$> (listDirectory path `catch` (\(_ :: IOError) -> pure []))
   forM_ cs $ \p -> do
     isDir <- System.Directory.doesDirectoryExist p
     if isDir then removeDirectoryRecursive p else removeFile p
+
+-- | Extracts a substring from the given text. Start is inclusive, end exclusive.
+subText :: Int -> T.Text -> Int -> T.Text
+subText start t end =
+  let (_, rest) = T.splitAt start t
+   in snd $ T.splitAt (end - start) rest
+
+-- | Replaces in the given text. Start is inclusive, end exclusive.
+replaceText :: Int -> T.Text -> Int -> T.Text -> T.Text
+replaceText start t end toInsert =
+  let before = subText 0 t start
+      after = subText end t (T.length t)
+   in before <> toInsert <> after
+
+-- | Inserts into the given text. Start is inclusive, end exclusive.
+insertText :: Int -> T.Text -> T.Text -> T.Text
+insertText idx t toInsert = replaceText idx t idx toInsert
+
+-- | Deletes a substring from the given text. Start is inclusive, end exclusive.
+deleteText :: Int -> T.Text -> Int -> T.Text
+deleteText start t end = replaceText start t end ""

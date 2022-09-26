@@ -32,6 +32,7 @@ library:
     - language-java
     - megaparsec
     - optparse-applicative
+    - parsec
     - process
     - process-extras
     - safe
@@ -77,6 +78,7 @@ tests:
       - filepath
       - heredoc
       - HTF
+      - language-java
       - safe
       - temporary
       - text-slides

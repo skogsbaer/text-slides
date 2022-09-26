@@ -1,4 +1,14 @@
-module Plugins.JavaCode (javaLangConfig) where
+module Plugins.JavaCode
+  ( javaLangConfig,
+    -- for testing
+    Decl (..),
+    addVersionsIfNecessary,
+    getCode,
+    removeCode,
+    insertCode,
+    locationToIndex,
+  )
+where
 
 {-
 
@@ -12,22 +22,26 @@ Next steps:
 -}
 
 import Control.Monad
--- import qualified Language.Java.Syntax as J
-
 import Control.Monad.Extra
+import Data.Char (isSpace)
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Development.Shake (Action)
--- import Language.Java.Parser
-import Language.Java.Syntax hiding (Location)
+import qualified Language.Java.Lexer as JavaLexer
+import Language.Java.Parser
+import Language.Java.Syntax hiding (Decl, Location)
+import qualified Language.Java.Syntax as JavaSyntax
 import Logging (note)
 import Plugins.CodeCommon
 import System.FilePath
+import qualified Text.Parsec as Parsec
 import Types
 import Utils
+
+type JLocation = JavaSyntax.Location
 
 {-
 The following text describes how code snippets are processed by the java code plugin.
@@ -355,22 +369,83 @@ merge xss = do
 
 -- STEP 4
 
-parseJava :: T.Text -> Maybe CompilationUnit
-parseJava _code = undefined
+parseJava :: [Location] -> T.Text -> Fail (Maybe CompilationUnit)
+parseJava locs code = do
+  res <- parseJavaOrMembers locs code
+  case res of
+    Left cu -> pure (Just cu)
+    Right _ -> pure Nothing
 
-{-
-  -- should we fail here? Swallowing errors is ugly
-  case parserWithMode ParseShallow compilationUnit "<input>" (T.unpack code) of
-    Left err -> putStrLn (fp ++ ": ERROR: " ++ show err)
-    Right x -> return ()
--}
+_parseMembers :: [Location] -> T.Text -> Fail (Maybe [MemberDecl])
+_parseMembers locs code = do
+  res <- parseJavaOrMembers locs code
+  case res of
+    Right mems -> pure (Just mems)
+    Left _ -> pure Nothing
 
-getPackageName :: T.Text -> Fail (Maybe PackageName)
-getPackageName = undefined
+parseJavaOrMembers :: [Location] -> T.Text -> Fail (Either CompilationUnit [MemberDecl])
+parseJavaOrMembers locs code =
+  case parse compilationUnit of
+    Left errCu ->
+      case parse memberDecls of
+        Left errMem ->
+          let err = if isToplevel then errCu else errMem
+           in Left (formatLocations locs <> ": " <> showText err)
+        Right x -> return (Right x)
+    Right x -> return (Left x)
+  where
+    parse p = parserWithMode ParseShallow p "<input>" (T.unpack code)
+    isToplevel =
+      flip any (T.lines code) $ \line ->
+        any
+          (\p -> p `T.isPrefixOf` line || ("public " <> p) `T.isPrefixOf` line)
+          ["class", "enum", "record"]
+
+type P = Parsec.Parsec [JavaLexer.L JavaLexer.Token] ParserState
+
+memberDecls :: P [MemberDecl]
+memberDecls = list d
+  where
+    d = do
+      ms <- list modifier
+      dec <- memberDecl
+      pure $ (dec ms)
+
+getPackageName :: [Location] -> T.Text -> Fail (Maybe PackageName)
+getPackageName locs code = do
+  mCu <- parseJava locs code
+  case mCu of
+    Nothing -> pure Nothing
+    Just (CompilationUnit mPkgDecl _imports _types) ->
+      case mPkgDecl of
+        Nothing -> pure (Just PackageDefault)
+        Just (PackageDecl name) -> pure (Just (PackageName (nameToText name)))
+
+formatLocations :: [Location] -> T.Text
+formatLocations locs =
+  T.concat (L.intersperse ", " (map unLocation locs))
 
 -- Example: ["a", "b", "c", "b"] ~~> ["a", "b_01", "c", "b_02"]
 addVersionsIfNecessary :: [T.Text] -> [T.Text]
-addVersionsIfNecessary l = l
+addVersionsIfNecessary l =
+  let counts :: M.Map T.Text Int
+      counts = foldr (\x m -> snd $ M.insertLookupWithKey incOld x 1 m) M.empty l
+   in loop counts l M.empty []
+  where
+    loop _ [] _ acc = reverse acc
+    loop counts (x : xs) versionMap acc =
+      case M.lookup x counts of
+        Just i | i > 1 ->
+          case M.insertLookupWithKey incOld x 2 versionMap of
+            (Just thisVersion, newVersionMap) ->
+              loop counts xs newVersionMap (appendVersion thisVersion x : acc)
+            (Nothing, newVersionMap) ->
+              loop counts xs newVersionMap (appendVersion 1 x : acc)
+        _ ->
+          loop counts xs versionMap (x : acc)
+    appendVersion i x =
+      (if i < 10 then "0" else "") <> showText i <> x
+    incOld _key _new _old = _old + 1
 
 groupSnippets :: [MergedSnippet] -> Fail [SnippetGroup]
 groupSnippets mss = do
@@ -386,14 +461,14 @@ groupSnippets mss = do
     loop :: Maybe SnippetGroup -> [MergedSnippet] -> Fail [SnippetGroup]
     loop Nothing [] = pure []
     loop Nothing (x : xs) = do
-      mPkgName <- getPackageName (ms_baseSnippets x)
+      mPkgName <- getPackageName (ms_locations x) (ms_baseSnippets x)
       let pkgName = fromMaybe PackageDefault mPkgName
           group = SnippetGroup pkgName (groupIdFromPkgName pkgName) [x]
       loop (Just group) xs
     loop (Just group) [] = pure [group]
     loop (Just group) (x : xs) = do
       mPkgName <- do
-        mp <- getPackageName (ms_baseSnippets x)
+        mp <- getPackageName (ms_locations x) (ms_baseSnippets x)
         case mp of
           Just _ -> pure mp
           _ ->
@@ -410,30 +485,202 @@ groupSnippets mss = do
           loop (Just (group {sg_snippets = sg_snippets group ++ [x]})) xs
 
 -- STEP 5
-_parseMembers :: T.Text -> Maybe [MemberDecl]
-_parseMembers = undefined
-
-parseJavaOrMembers :: T.Text -> Maybe (Either CompilationUnit [MemberDecl])
-parseJavaOrMembers = undefined
-
 concatCode :: T.Text -> T.Text -> T.Text
-concatCode = undefined -- ensure one blank link
+concatCode c1 c2 =
+  if T.strip c1 == ""
+    then c2
+    else
+      if T.strip c2 == ""
+        then c1
+        else c1 <> sep <> c2
+  where
+    sep =
+      if newlineCount == 0
+        then "\n\n"
+        else if newlineCount == 1 then "\n" else ""
+    newlineCount =
+      countNewlines (T.takeWhileEnd isSpace c1)
+        + countNewlines (T.takeWhile isSpace c2)
+    countNewlines = T.count "\n"
 
+data Decl = Decl
+  { d_id :: T.Text,
+    d_start :: JLocation,
+    d_end :: JLocation,
+    d_sub :: [Decl],
+    d_public :: Bool
+  }
+  deriving (Show, Eq)
+
+isPublic :: [Modifier] -> Bool
+isPublic mods = Public `elem` mods
+
+compilationUnitToDecls :: CompilationUnit -> [Decl]
+compilationUnitToDecls (CompilationUnit _ _ typeDecls) =
+  mapMaybe typeDeclToDecl typeDecls
+  where
+    typeDeclToDecl :: TypeDecl -> Maybe Decl
+    typeDeclToDecl (ClassTypeDecl cls) =
+      Just $
+        case cls of
+          ClassDecl (locStart, locEnd) mods ident _ _ _ (ClassBody decls) ->
+            Decl (identToText ident) locStart locEnd (mapMaybe declToDecl decls) (isPublic mods)
+          RecordDecl (locStart, locEnd) mods ident _ _ _ (ClassBody decls) ->
+            Decl (identToText ident) locStart locEnd (mapMaybe declToDecl decls) (isPublic mods)
+          EnumDecl (locStart, locEnd) mods ident _ (EnumBody _ decls) ->
+            Decl (identToText ident) locStart locEnd (mapMaybe declToDecl decls) (isPublic mods)
+    typeDeclToDecl (InterfaceTypeDecl _) = Nothing
+    declToDecl (JavaSyntax.MemberDecl memDecl) = memberDeclToDecl memDecl
+    declToDecl (JavaSyntax.InitDecl _ _) = Nothing
+
+memberDeclToDecl :: MemberDecl -> Maybe Decl
+memberDeclToDecl memDecl =
+  case memDecl of
+    FieldDecl (startLoc, endLoc) mods _ varDecls ->
+      let id = T.concat (map (\(VarDecl x _) -> idOfVarDeclId x) varDecls)
+       in Just $ Decl id startLoc endLoc [] (isPublic mods)
+    MethodDecl (startLoc, endLoc) mods _ _ ident _ _ _ _ ->
+      Just $ Decl (identToText ident) startLoc endLoc [] (isPublic mods)
+    ConstructorDecl (startLoc, endLoc) mods _ ident _ _ _ ->
+      Just $ Decl ("$init_" <> identToText ident) startLoc endLoc [] (isPublic mods)
+    MemberClassDecl _ -> Nothing
+    MemberInterfaceDecl _ -> Nothing
+  where
+    idOfVarDeclId (VarId i) = identToText i
+    idOfVarDeclId (VarDeclArray i) = idOfVarDeclId i <> "[]"
+
+locationToIndex :: T.Text -> JLocation -> Int
+locationToIndex t loc =
+  let lineIdx = loc_line loc
+      colIdx = loc_column loc
+      idx = eatLines t lineIdx
+   in idx + colIdx - 1
+  where
+    eatLines :: T.Text -> Int -> Int
+    eatLines t i =
+      if i <= 1
+        then 0
+        else eatLines (stripLine t) (i - 1)
+    stripLine :: T.Text -> T.Text
+    stripLine t = T.tail (T.dropWhile (\c -> c /= '\n') t)
+
+getCode :: T.Text -> Decl -> T.Text
+getCode t d =
+  let start = locationToIndex t (d_start d)
+      end = locationToIndex t (d_end d)
+   in subText start t end
+
+removeCode :: T.Text -> [Decl] -> T.Text
+removeCode t decls =
+  let -- sort first
+      startEndIdxs =
+        L.sort $
+          map (\d -> (locationToIndex t (d_start d), locationToIndex t (d_end d))) decls
+   in foldr (\(start, end) acc -> deleteText start acc end) t startEndIdxs
+
+insertCode :: T.Text -> JLocation -> T.Text -> T.Text
+insertCode t loc toInsert =
+  let idx = locationToIndex t loc
+   in insertText idx t toInsert
+
+data AddLocation
+  = AddAtEnd
+  | AddHere JLocation
+
+mergeWithPrev ::
+  MergedSnippet -> M.Map T.Text Decl -> MergedSnippet -> [Decl] -> AddLocation -> MergedSnippet
+mergeWithPrev prevSnip prevDecls thisSnip thisDecls addLoc =
+  let (toReplace, toAppend) = replaceOrAppend prevDecls thisDecls ([], [])
+      cleanPrev = removeCode (ms_baseSnippets prevSnip) (map fst toReplace)
+      newCodePieces = map (getCode (ms_baseSnippets thisSnip)) (map snd toReplace ++ toAppend)
+      newCode = L.foldl' concatCode "" newCodePieces
+      newBase =
+        case addLoc of
+          AddAtEnd -> cleanPrev `concatCode` newCode
+          AddHere loc -> insertCode cleanPrev loc ("    " <> newCode <> "\n")
+   in thisSnip {ms_baseSnippets = newBase}
+  where
+    replaceOrAppend ::
+      M.Map T.Text Decl ->
+      [Decl] ->
+      ([(Decl, Decl)], [Decl]) ->
+      ([(Decl, Decl)], [Decl])
+    replaceOrAppend _ [] (repl, app) = (reverse repl, reverse app)
+    replaceOrAppend prevDecls (d : ds) (repl, app) =
+      case M.lookup (d_id d) prevDecls of
+        Nothing -> replaceOrAppend prevDecls ds (repl, d : app)
+        Just prevD -> replaceOrAppend prevDecls ds ((prevD, d) : repl, app)
+
+{-
+  * CASE toplevel.
+    The new content of the snippet is the content of the preceding snippet such that
+     - declarations that already exist in the preceding snippet are replaced,
+     - declarations that do not existing in the preceding snippet are appended.
+-}
 mergeCu :: MergedSnippet -> CompilationUnit -> MergedSnippet -> CompilationUnit -> MergedSnippet
-mergeCu _prevSnip _prevCu _snip _cu = undefined
+mergeCu prevSnip prevCu snip cu =
+  let prevDecls = M.fromList (map (\d -> (d_id d, d)) (compilationUnitToDecls prevCu))
+      thisDecls = compilationUnitToDecls cu
+   in mergeWithPrev prevSnip prevDecls snip thisDecls AddAtEnd
 
-mergeMembers :: MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl] -> MergedSnippet
-mergeMembers _prevSnip _prevCu _snip _methods = undefined
+{-
+  * First public class
+  * First non-public class
+-}
+findMainClass :: CompilationUnit -> Maybe Decl
+findMainClass cu =
+  let decls = compilationUnitToDecls cu
+   in case L.find d_public decls of
+        Just d -> Just d
+        Nothing ->
+          case decls of
+            [] -> Nothing
+            (x : _) -> Just x
+
+{-
+  * CASE nested, i.e. the code contains only methods. The plugin tries to find methods with
+    the same name in the toplevel declarations of the preceding snippet.
+    - If it finds such a method, the new content of the snippet is the content of the preceding
+      snippet with the method being updated.
+    - If no such method exists, the new content of the snippet is the content of the preceding
+      snippet with the method being appended to the content of the main class of the preceding
+      snippet.
+-}
+mergeMembers ::
+  MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl] -> Fail MergedSnippet
+mergeMembers prevSnip prevCu snip methods = do
+  let prevDecls = L.foldl' addSubs M.empty (compilationUnitToDecls prevCu)
+      thisDecls = map memberDeclToDecl methods
+      thisDeclsGood = catMaybes thisDecls
+  if length thisDecls /= length thisDeclsGood
+    then
+      Left
+        ( formatLocations (ms_locations snip)
+            <> ": cannot handle inner classes or interfaces"
+        )
+    else case findMainClass prevCu of
+      Nothing ->
+        Left
+          ( formatLocations (ms_locations snip)
+              <> ": no main class found in preceding snippet but this snippets defines methods"
+          )
+      Just mc ->
+        pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
+  where
+    addSubs :: M.Map T.Text Decl -> Decl -> M.Map T.Text Decl
+    addSubs m d = L.foldl' add m (d_sub d)
+    add :: M.Map T.Text Decl -> Decl -> M.Map T.Text Decl
+    add m d = M.insertWith (\_new old -> old) (d_id d) d m
 
 updateSnippetContent :: MergedSnippet -> MergedSnippet -> Fail MergedSnippet
 updateSnippetContent prevSnip snip = do
-  let mPrevCu = parseJava (ms_baseSnippets prevSnip)
-      mThisParsed = parseJavaOrMembers (ms_baseSnippets snip)
+  mPrevCu <- parseJava (ms_locations prevSnip) (ms_baseSnippets prevSnip)
+  mThisParsed <- parseJavaOrMembers (ms_locations snip) (ms_baseSnippets snip)
   case (mPrevCu, mThisParsed) of
-    (Just prevCu, Just (Left thisCu)) ->
+    (Just prevCu, Left thisCu) ->
       pure $ mergeCu prevSnip prevCu snip thisCu
-    (Just prevCu, Just (Right thisMethods)) ->
-      pure $ mergeMembers prevSnip prevCu snip thisMethods
+    (Just prevCu, Right thisMethods) ->
+      mergeMembers prevSnip prevCu snip thisMethods
     _ ->
       pure $
         snip
@@ -461,8 +708,14 @@ updateGroup sg = do
       pure (newX : rest)
 
 -- STEP 6
-getMainClassName :: T.Text -> Fail (Maybe ClassName)
-getMainClassName = undefined
+getMainClassName :: [Location] -> T.Text -> Fail (Maybe ClassName)
+getMainClassName locs code = do
+  mCu <- parseJava locs code
+  case mCu of
+    Nothing -> pure Nothing
+    Just cu ->
+      let mClass = findMainClass cu
+       in pure (fmap (ClassName . d_id) mClass)
 
 _classDeclIdent :: ClassDecl -> Ident
 _classDeclIdent d =
@@ -471,18 +724,19 @@ _classDeclIdent d =
     RecordDecl _ _ recName _ _ _ _ -> recName
     EnumDecl _ _ enumName _ _ -> enumName
 
-_identToText :: Ident -> T.Text
-_identToText = undefined
+identToText :: Ident -> T.Text
+identToText (Ident s) = T.pack s
 
-_nameToText :: Name -> T.Text
-_nameToText = undefined
+nameToText :: Name -> T.Text
+nameToText (Name idents) =
+  T.intercalate "." (map identToText idents)
 
 snippetGroupToJSnippets :: CodeFilePath -> SnippetGroup -> Fail [JSnippet]
 snippetGroupToJSnippets key group =
   mapM toJSnippet (zip [1 ..] (sg_snippets group))
   where
     toJSnippet (v, ms) = do
-      mClsName <- getMainClassName (ms_baseSnippets ms)
+      mClsName <- getMainClassName (ms_locations ms) (ms_baseSnippets ms)
       pure $
         JSnippet
           { js_baseSnippets = ms_baseSnippets ms,

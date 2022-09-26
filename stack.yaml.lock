@@ -5,19 +5,19 @@
 
 packages:
 - completed:
+    commit: 2c58680189f50c3117537bd90b302236b36c5874
+    git: /Users/swehr/devel/language-java
     name: language-java
-    version: 0.2.9
-    git: https://github.com/skogsbaer/language-java.git
     pantry-tree:
+      sha256: 7bd15e27ced5319c933faaea2815b2e20757df5c65beebff7a9d58519ff080e6
       size: 4415
-      sha256: 0f52c91cd0a420230a9efb3d41c657d146318d3a6c317ec1c07a05a16459c929
-    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af
+    version: 0.2.9
   original:
-    git: https://github.com/skogsbaer/language-java.git
-    commit: 77f7671e2ed76baa32d982cae565ba88eb5a17af
+    commit: 2c58680189f50c3117537bd90b302236b36c5874
+    git: /Users/swehr/devel/language-java
 snapshots:
 - completed:
+    sha256: 637fb77049b25560622a224845b7acfe81a09fdb6a96a3c75997a10b651667f6
     size: 534126
     url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/31.yaml
-    sha256: 637fb77049b25560622a224845b7acfe81a09fdb6a96a3c75997a10b651667f6
   original: lts-16.31
