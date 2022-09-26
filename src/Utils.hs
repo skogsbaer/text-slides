@@ -1,7 +1,7 @@
 module Utils where
 
 import Control.Exception
-import Control.Monad (forM_)
+import Control.Monad
 import Control.Monad.IO.Class
 import qualified Crypto.Hash.MD5 as MD5
 import Data.Bifunctor
@@ -151,6 +151,19 @@ myListDirectory :: FilePath -> (FilePath -> Bool) -> IO [FilePath]
 myListDirectory dir pred = do
   fs <- listDirectory dir
   return (map (\x -> dir </> x) (filter pred fs))
+
+-- Note: no cycle checking is performed
+myListDirectoryRecursive :: FilePath -> (FilePath -> Bool) -> IO [FilePath]
+myListDirectoryRecursive dir pred = do
+  fs <- listDirectory dir
+  moreFiles <- forM fs $ \x -> do
+    let p = dir </> x
+    isDir <- System.Directory.doesDirectoryExist p
+    if isDir && not (x `elem` [".", ".."])
+      then myListDirectoryRecursive p pred
+      else pure []
+  let thisFiles = (map (\x -> dir </> x) (filter pred fs))
+  pure (thisFiles ++ concat moreFiles)
 
 isPathPrefix :: FilePath -> FilePath -> Bool
 isPathPrefix prefix full =

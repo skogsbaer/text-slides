@@ -187,7 +187,7 @@ findVarFile inputFile = do
   loop cands
   where
     loop [] = pure Nothing
-    loop (x:xs) = do
+    loop (x : xs) = do
       ex <- doesFileExist x
       if ex then pure (Just x) else loop xs
 
