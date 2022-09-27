@@ -2,6 +2,5 @@ resolver: nightly-2022-09-26
 packages:
 - .
 extra-deps:
-  #- git: https://github.com/skogsbaer/language-java.git
-  - git: /Users/swehr/devel/language-java
+  - git: https://github.com/skogsbaer/language-java.git
     commit: 2c035815440dd2ec5bb01e0b45273722bc33eae8

@@ -6,7 +6,7 @@
 packages:
 - completed:
     commit: 2c035815440dd2ec5bb01e0b45273722bc33eae8
-    git: /Users/swehr/devel/language-java
+    git: https://github.com/skogsbaer/language-java.git
     name: language-java
     pantry-tree:
       sha256: df5723c7d77bcb22d8366f42cffdbdab5ed1ce68a8d9e7ed5f639a427e01316e
@@ -14,7 +14,7 @@ packages:
     version: 0.2.9
   original:
     commit: 2c035815440dd2ec5bb01e0b45273722bc33eae8
-    git: /Users/swehr/devel/language-java
+    git: https://github.com/skogsbaer/language-java.git
 snapshots:
 - completed:
     sha256: e8d2623ddf31a11ece3e72633c0b7db97a4dfb93b8c44ab760913bebfd2cf2c4
