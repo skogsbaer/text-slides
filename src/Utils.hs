@@ -192,13 +192,13 @@ removeAllFilesInDirectory path = do
 subText :: Int -> T.Text -> Int -> T.Text
 subText start t end =
   let (_, rest) = T.splitAt start t
-   in snd $ T.splitAt (end - start) rest
+   in fst $ T.splitAt (end - start) rest
 
 -- | Replaces in the given text. Start is inclusive, end exclusive.
 replaceText :: Int -> T.Text -> Int -> T.Text -> T.Text
 replaceText start t end toInsert =
   let before = subText 0 t start
-      after = subText end t (T.length t)
+      after = subText (max start end) t (T.length t)
    in before <> toInsert <> after
 
 -- | Inserts into the given text. Start is inclusive, end exclusive.

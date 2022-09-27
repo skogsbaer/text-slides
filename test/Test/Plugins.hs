@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -F -pgmF htfpp #-}
 
-module Test.External
+module Test.Plugins
   ( htf_thisModulesTests,
   )
 where
@@ -11,14 +11,13 @@ import qualified Data.Set as S
 import Driver
 import System.Directory
 import System.FilePath
-import System.IO.Temp
 import Test.Framework
 import Types
 import Utils
+import Temp
 
-runExternal :: FilePath -> (FilePath -> IO ()) -> IO ()
-runExternal mdFile checkFun = withTempDirectory "/tmp" "text-slides-test" $ \dir -> do
-  -- FIXME: do not delete temp file in case of errors
+runTextSlides :: FilePath -> (FilePath -> IO ()) -> IO ()
+runTextSlides mdFile checkFun = withSysTempDir deleteIfNoException "text-slides-test" $ \dir -> do
   copyFile mdFile (dir </> takeBaseName mdFile)
   let opts =
         emptyCmdlineOpts
@@ -29,12 +28,13 @@ runExternal mdFile checkFun = withTempDirectory "/tmp" "text-slides-test" $ \dir
   checkFun dir
 
 test_java :: IO ()
-test_java = runExternal "test/data/test_java.md" $ \outDir -> do
+test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
   let pluginDir = outDir </> "build/plugins/java/"
       referenceDir = "test/data/test_java"
-  _genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
-  let _expectedFiles = javaFiles pluginDir
-      _referenceFiles = javaFiles referenceDir
+  genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
+  let expectedFiles = javaFiles pluginDir
+  assertListsEqualAsSets expectedFiles genFiles
+  let _referenceFiles = javaFiles referenceDir
   _ <- fail "implement test_java"
   return ()
   where

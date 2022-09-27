@@ -444,7 +444,7 @@ addVersionsIfNecessary l =
         _ ->
           loop counts xs versionMap (x : acc)
     appendVersion i x =
-      (if i < 10 then "0" else "") <> showText i <> x
+      x <> (if i < 10 then "_0" else "_") <> showText i
     incOld _key _new _old = _old + 1
 
 groupSnippets :: [MergedSnippet] -> Fail [SnippetGroup]
@@ -556,13 +556,18 @@ locationToIndex t loc =
       idx = eatLines t lineIdx
    in idx + colIdx - 1
   where
+    -- Returns the number of character until line i (index starts at 1)
     eatLines :: T.Text -> Int -> Int
     eatLines t i =
       if i <= 1
         then 0
-        else eatLines (stripLine t) (i - 1)
-    stripLine :: T.Text -> T.Text
-    stripLine t = T.tail (T.dropWhile (\c -> c /= '\n') t)
+        else
+          let (first, rest) = T.span (/= '\n') t
+              n = T.length first
+           in case T.uncons rest of
+                Nothing -> n
+                Just ('\n', rest1) -> n + 1 + eatLines rest1 (i - 1)
+                rest -> error ("unexpected result from uncons: " ++ show rest)
 
 getCode :: T.Text -> Decl -> T.Text
 getCode t d =
@@ -574,9 +579,15 @@ removeCode :: T.Text -> [Decl] -> T.Text
 removeCode t decls =
   let -- sort first
       startEndIdxs =
-        L.sort $
-          map (\d -> (locationToIndex t (d_start d), locationToIndex t (d_end d))) decls
+        mkNonOverlapping $
+          L.sort $
+            map (\d -> (locationToIndex t (d_start d), locationToIndex t (d_end d))) decls
    in foldr (\(start, end) acc -> deleteText start acc end) t startEndIdxs
+  where
+    mkNonOverlapping [] = []
+    mkNonOverlapping [x] = [x]
+    mkNonOverlapping ((start, end) : rest@((start2, _) : _)) =
+      (start, min end start2) : mkNonOverlapping rest
 
 insertCode :: T.Text -> JLocation -> T.Text -> T.Text
 insertCode t loc toInsert =

@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5b74d0d3710e6dab52a877bea9df5ba6b1ac817d0958a14dae9b950d376ec9b6
+-- hash: 449e82874404bc6fd9ca848551f3a13fafad3951d08c7e8527255be9a8e84c98
 
 name:           text-slides
 version:        0.1
@@ -45,6 +45,7 @@ library
       Plugins.Keynote
       Plugins.Mermaid
       RuleUtils
+      Temp
       Types
       Utils
       Vars
@@ -130,10 +131,10 @@ test-suite unit-tests
   type: exitcode-stdio-1.0
   main-is: Tests.hs
   other-modules:
-      Test.External
       Test.JavaCode
       Test.Keynote
       Test.Parser
+      Test.Plugins
       Test.TestBuildConfig
       Test.Transform
       Test.Utils

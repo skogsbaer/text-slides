@@ -1,3 +1,7 @@
+---
+title: Test the Java plugin
+---
+
 This is a test for the java plugin
 
 The following will be added to the start of each snippet with the default key.
