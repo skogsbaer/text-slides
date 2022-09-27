@@ -105,12 +105,6 @@ public static void main(String[] args) {
 }
 ~~~
 
-We can also replace methods in classes that are not the main class:
-
-~~~java
-int bar(int x) { return x; }
-~~~
-
 We can replace whole classes of the snippet:
 
 ~~~java

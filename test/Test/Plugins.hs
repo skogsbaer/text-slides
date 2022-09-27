@@ -19,6 +19,8 @@ import Data.Maybe
 import System.Process
 import System.Exit
 import Control.Monad
+import Language.Java.Parser
+import Language.Java.Syntax hiding (Decl, Location)
 
 runTextSlides :: FilePath -> (FilePath -> IO ()) -> IO ()
 runTextSlides mdFile checkFun = withSysTempDir deleteIfNoException "text-slides-test" $ \dir -> do
@@ -38,10 +40,27 @@ checkCmd cmd = do
     ExitSuccess -> return ()
     _ -> fail ("FAILED: " ++ cmd)
 
+parseJava :: FilePath -> IO CompilationUnit
+parseJava fp = do
+  code <- readFile fp
+  case parserWithState pState compilationUnit fp code of
+    Left err -> fail (fp ++ ": parse error: " ++ show err)
+    Right cu -> pure cu
+  where
+    pState =
+      ParserState ParseFull False -- no locations
+
+compareJava :: FilePath -> FilePath -> IO ()
+compareJava reference generated = do
+  refCu <- parseJava reference
+  genCu <- parseJava generated
+  unless (refCu == genCu) $
+    fail ("Generated file " ++ generated ++ " differs from reference file " ++ reference)
+
 test_java :: IO ()
 test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
   let pluginDir = outDir </> "build/plugins/java/"
-      referenceDir = "test/data/test_java"
+      referenceDir = "test/data/test_java_reference"
   genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
   putStrLn (show genFiles)
   let expectedFiles = javaFiles pluginDir
@@ -53,14 +72,15 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
     ("notGenerated=" ++ show notGenerated ++ ", extra=" ++ show extra)
     expectedFiles genFiles
   forM_ expectedFiles $ \f ->
-      unless ("test_java.java" `L.isSuffixOf` f) $ do
+      unless (isAllCodeFile f) $ do
         putStrLn ("Compiling " ++ f)
         checkCmd ("javac -cp " ++ jarFile ++ " " ++ f)
-  let _referenceFiles = javaFiles referenceDir
-  _ <- fail "implement test_java"
-  return ()
+  let referenceFiles = javaFiles referenceDir
+  forM_ (zip referenceFiles expectedFiles) $ \(ref, gen) ->
+    unless (isAllCodeFile ref) $ compareJava ref gen
   where
     jarFile = "test/data/junit-platform-console-standalone-1.8.1.jar"
+    isAllCodeFile f = "test_java.java" `L.isSuffixOf` f
     javaFiles dir =
       let outAll = dir </> "test_java.java"
           outDef1 = dir </> "default_pkg/v01/C1.java"
@@ -73,7 +93,6 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
           outFoo6 = dir </> "foo_v03/v04/foo/C2.java"
           outFoo7 = dir </> "foo_v03/v05/foo/C2.java"
           outFoo8 = dir </> "foo_v03/v06/foo/C2.java"
-          outFoo9 = dir </> "foo_v03/v07/foo/C2.java"
           outAlt1 = dir </> "alternative/default_pkg_v01/v01/C1.java"
           outAlt2 = dir </> "alternative/default_pkg_v01/v02/C1.java"
           outAlt3 = dir </> "alternative/default_pkg_v02/C3.java"
@@ -88,7 +107,6 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
             outFoo6,
             outFoo7,
             outFoo8,
-            outFoo9,
             outAlt1,
             outAlt2,
             outAlt3

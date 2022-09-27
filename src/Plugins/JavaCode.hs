@@ -14,7 +14,6 @@ where
 
 Next steps:
 
-- Test the java plugin
 - Make sure that the tests of the lectures AKI_Prog_Java and AdvancedProg are working
 
 -}
@@ -676,34 +675,31 @@ findMainClass cu =
     - If no such method exists, the new content of the snippet is the content of the preceding
       snippet with the method being appended to the content of the main class of the preceding
       snippet.
+  Note: currently we support replacement only in the main class.
 -}
 mergeMembers ::
   MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl] -> Fail MergedSnippet
-mergeMembers prevSnip prevCu snip methods = do
-  let prevDecls = L.foldl' addSubs M.empty (compilationUnitToDecls prevCu)
-      thisDecls = map memberDeclToDecl methods
-      thisDeclsGood = catMaybes thisDecls
-  if length thisDecls /= length thisDeclsGood
-    then
+mergeMembers prevSnip prevCu snip methods =
+  case findMainClass prevCu of
+    Nothing ->
       Left
-        ( formatLocations (ms_locations snip)
-            <> ": cannot handle inner classes or interfaces"
-        )
-    else case findMainClass prevCu of
-      Nothing ->
-        Left
-          ( formatLocations (ms_locations snip)
-              <> ": no main class found in preceding snippet but this snippets defines methods"
-          )
-      Just mc -> do
-        debugM ("Merging " ++ show (length methods) ++ " methods intro main class " ++
-                show mc ++ " from previous compilation unit ...")
-        pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
-  where
-    addSubs :: M.Map T.Text Decl -> Decl -> M.Map T.Text Decl
-    addSubs m d = L.foldl' add m (d_sub d)
-    add :: M.Map T.Text Decl -> Decl -> M.Map T.Text Decl
-    add m d = M.insertWith (\_new old -> old) (d_id d) d m
+      ( formatLocations (ms_locations snip)
+        <> ": no main class found in preceding snippet but this snippets defines methods"
+      )
+    Just mc -> do
+      let prevDecls = M.fromList (map (\d -> (d_id d, d)) (d_sub mc))
+          thisDecls = map memberDeclToDecl methods
+          thisDeclsGood = catMaybes thisDecls
+      if length thisDecls /= length thisDeclsGood
+        then
+          Left
+            ( formatLocations (ms_locations snip)
+                <> ": cannot handle inner classes or interfaces"
+            )
+        else do
+          debugM ("Merging " ++ show (length methods) ++ " methods intro main class " ++
+                   show mc ++ " from previous compilation unit ...")
+          pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
 
 updateSnippetContent :: MergedSnippet -> MergedSnippet -> Fail MergedSnippet
 updateSnippetContent prevSnip snip = do
