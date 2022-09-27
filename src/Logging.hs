@@ -3,8 +3,10 @@ module Logging
     doLog,
     trace,
     traceIO,
+    traceM,
     debug,
     debugIO,
+    debugM,
     note,
     noteIO,
     info,
@@ -134,3 +136,11 @@ logError = liftIO . logErrorIO
 
 logErrorIO :: String -> IO ()
 logErrorIO = doLog ERROR
+
+debugM :: Monad m => String -> m ()
+debugM msg =
+  unsafePerformIO (debugIO msg) `seq` pure ()
+
+traceM :: Monad m => String -> m ()
+traceM msg =
+  unsafePerformIO (debugIO msg) `seq` pure ()

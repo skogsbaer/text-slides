@@ -19,7 +19,7 @@ test_addVersions = do
   assertEqual [] (addVersionsIfNecessary [])
   assertEqual ["x"] (addVersionsIfNecessary ["x"])
   assertEqual ["x", "y"] (addVersionsIfNecessary ["x", "y"])
-  assertEqual ["x_01", "y", "x_02"] (addVersionsIfNecessary ["x", "y", "x"])
+  assertEqual ["x_v01", "y", "x_v02"] (addVersionsIfNecessary ["x", "y", "x"])
 
 test_locationToIndex :: IO ()
 test_locationToIndex = do
@@ -40,13 +40,15 @@ test_locationToIndex2 = do
 test_getCode :: IO ()
 test_getCode = do
   let startLoc1 = mkLoc 2 3
-      endLoc1 = mkLoc 2 9
+      endLoc1 = mkLoc 2 8
   assertEqual "second" (getCode code (mkDecl startLoc1 endLoc1))
   let startLoc2 = mkLoc 2 3
-      endLoc2 = mkLoc 3 2
+      endLoc2 = mkLoc 3 1
   assertEqual "second line\n}" (getCode code (mkDecl startLoc2 endLoc2))
   where
     code = "first line{\n  second line\n}\nfourth line"
+-- loc1                    ^    ^
+-- loc2                    ^               ^
 
 mkDecl :: JLocation -> JLocation -> Decl
 mkDecl start end = Decl "foo" start end [] False
@@ -54,11 +56,11 @@ mkDecl start end = Decl "foo" start end [] False
 test_removeCode :: IO ()
 test_removeCode = do
   let startLoc1 = mkLoc 2 3
-      endLoc1 = mkLoc 3 2
+      endLoc1 = mkLoc 3 1
       decl1 = mkDecl startLoc1 endLoc1
   assertEqual "first line{\n  \nfourth line" (removeCode code [decl1])
   let startLoc2 = mkLoc 1 6
-      endLoc2 = mkLoc 2 4
+      endLoc2 = mkLoc 2 3
       decl2 = mkDecl startLoc2 endLoc2
   assertEqual "firstecond line\n}\nfourth line" (removeCode code [decl2])
   assertEqual "first\nfourth line" (removeCode code [decl1, decl2])
@@ -67,16 +69,18 @@ test_removeCode = do
     "ad"
     ( removeCode
         "abcd"
-        [mkDecl (mkLoc 1 3) (mkLoc 1 4), mkDecl (mkLoc 1 2) (mkLoc 1 3)]
+        [mkDecl (mkLoc 1 3) (mkLoc 1 3), mkDecl (mkLoc 1 2) (mkLoc 1 2)]
     )
   assertEqual
     "a"
     ( removeCode
         "abcd"
-        [mkDecl (mkLoc 1 3) (mkLoc 1 5), mkDecl (mkLoc 1 2) (mkLoc 1 4)]
+        [mkDecl (mkLoc 1 3) (mkLoc 1 4), mkDecl (mkLoc 1 2) (mkLoc 1 3)]
     )
   where
     code = "first line{\n  second line\n}\nfourth line"
+-- decl1                   ^            ^
+-- decl2         ^         ^
 
 test_insertCode :: IO ()
 test_insertCode = do
@@ -84,6 +88,3 @@ test_insertCode = do
   assertEqual "first line{\n  FOOsecond line\n}\nfourth line" (insertCode code loc "FOO")
   where
     code = "first line{\n  second line\n}\nfourth line"
-
--- decl1                   ^             ^
--- decl2         ^          ^

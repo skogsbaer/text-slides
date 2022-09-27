@@ -14,8 +14,6 @@ where
 
 Next steps:
 
-- Implement test for java plugin
-- Implement missing pieces of the java plugin
 - Test the java plugin
 - Make sure that the tests of the lectures AKI_Prog_Java and AdvancedProg are working
 
@@ -34,12 +32,12 @@ import qualified Language.Java.Lexer as JavaLexer
 import Language.Java.Parser
 import Language.Java.Syntax hiding (Decl, Location)
 import qualified Language.Java.Syntax as JavaSyntax
-import Logging (note)
 import Plugins.CodeCommon
 import System.FilePath
 import qualified Text.Parsec as Parsec
 import Types
 import Utils
+import Logging
 
 type JLocation = JavaSyntax.Location
 
@@ -102,12 +100,21 @@ of ms_clear comes from the clear argument of the first snippet without
 method:true, body:true or a test argument.
 -}
 
+newtype TestName = TestName { unTestName :: T.Text }
+  deriving (Eq, Show)
+
+data JTest = JTest
+  { jt_name :: TestName
+  , jt_code :: T.Text
+  }
+  deriving (Eq, Show)
+
 data MergedSnippet = MergedSnippet
   { ms_clear :: Bool,
     ms_baseSnippets :: T.Text,
     ms_methodSnippets :: [T.Text],
     ms_bodySnippets :: [T.Text],
-    ms_testSnippets :: [T.Text],
+    ms_testSnippets :: [JTest],
     ms_locations :: [Location]
   }
   deriving (Eq, Show)
@@ -181,7 +188,7 @@ data JSnippet = JSnippet
   { js_baseSnippets :: T.Text,
     js_methodSnippets :: [T.Text],
     js_bodySnippets :: [T.Text],
-    js_testSnippets :: [T.Text],
+    js_testSnippets :: [JTest],
     js_locations :: [Location],
     js_version :: Version,
     js_package :: PackageName,
@@ -257,8 +264,8 @@ append snips = do
     annotateAppend :: [CodeSnippet] -> Fail [(CodeSnippet, Bool)] -- bool flag for append
     annotateAppend [] = pure []
     annotateAppend (x : xs) = do
-      append <- getArg "append" x
-      standalone <- getArg "standalone" x
+      append <- getArg "append" x False
+      standalone <- getArg "standalone" x True
       xs' <- annotateAppend xs
       case (standalone, xs') of
         (False, ((y, _) : rest)) -> pure $ (x, append) : (y, True) : rest
@@ -266,9 +273,9 @@ append snips = do
         (False, []) ->
           Left
             ( unLocation (cc_location x)
-                <> ": standalone:false for last snippet"
+                <> ": standalone:false for last snippet of a group"
             )
-    getArg k x = fromMaybe False <$> getOptionalBoolValue (cc_location x) k (cc_args x)
+    getArg k x def = fromMaybe def <$> getOptionalBoolValue (cc_location x) k (cc_args x)
     loop :: Maybe [CodeSnippet] -> [(CodeSnippet, Bool)] -> Fail [[CodeSnippet]]
     loop Nothing [] = pure [[]]
     loop Nothing (x : xs) = loop (Just [fst x]) xs
@@ -281,6 +288,13 @@ append snips = do
         else loop (Just (cur ++ [x])) xs
 
 -- STEP 3
+data PreMergedSnippet = PreMergedSnippet
+  { pms_baseSnippets :: [CodeSnippet],
+    pms_methodSnippets :: [[CodeSnippet]],
+    pms_bodySnippets :: [[CodeSnippet]],
+    pms_testSnippets :: [(TestName, [CodeSnippet])]
+  }
+  deriving (Eq, Show)
 
 data SnippetKind
   = SnippetKindRegular
@@ -298,7 +312,8 @@ addToPreMergedSnippet k snips pms =
     SnippetKindRegular -> pms {pms_baseSnippets = pms_baseSnippets pms ++ snips}
     SnippetKindBody -> pms {pms_bodySnippets = pms_bodySnippets pms ++ [snips]}
     SnippetKindMethod -> pms {pms_methodSnippets = pms_methodSnippets pms ++ [snips]}
-    SnippetKindTest _ -> pms {pms_testSnippets = pms_testSnippets pms ++ [snips]}
+    SnippetKindTest testName ->
+      pms {pms_testSnippets = pms_testSnippets pms ++ [(TestName testName, snips)]}
 
 snippetKind :: CodeSnippet -> Fail SnippetKind
 snippetKind cs = do
@@ -314,14 +329,6 @@ snippetKind cs = do
   where
     loc = cc_location cs
     get k = fromMaybe False <$> getOptionalBoolValue loc k (cc_args cs)
-
-data PreMergedSnippet = PreMergedSnippet
-  { pms_baseSnippets :: [CodeSnippet],
-    pms_methodSnippets :: [[CodeSnippet]],
-    pms_bodySnippets :: [[CodeSnippet]],
-    pms_testSnippets :: [[CodeSnippet]]
-  }
-  deriving (Eq, Show)
 
 snippetsToText :: [CodeSnippet] -> T.Text
 snippetsToText = mkCode javaLangConfig
@@ -344,7 +351,8 @@ merge xss = do
             ms_baseSnippets = snippetsToText (pms_baseSnippets pms),
             ms_methodSnippets = map snippetsToText (pms_methodSnippets pms),
             ms_bodySnippets = map snippetsToText (pms_bodySnippets pms),
-            ms_testSnippets = map snippetsToText (pms_testSnippets pms),
+            ms_testSnippets =
+              map (\(name, cs) -> JTest name (snippetsToText cs)) (pms_testSnippets pms),
             ms_locations = map cc_location (pms_baseSnippets pms)
           }
     loop :: Maybe PreMergedSnippet -> [[CodeSnippet]] -> Fail [PreMergedSnippet]
@@ -407,10 +415,13 @@ memberDecls :: P [MemberDecl]
 memberDecls = list d
   where
     d = do
+      loc <- getLocation
       ms <- list modifier
       dec <- memberDecl
-      pure $ (dec ms)
+      pure $ (dec loc ms)
 
+-- Returns Nothing if either the code could not be parsed as a compilation unit
+-- or if there is no package declared.
 getPackageName :: [Location] -> T.Text -> Fail (Maybe PackageName)
 getPackageName locs code = do
   mCu <- parseJava locs code
@@ -418,14 +429,14 @@ getPackageName locs code = do
     Nothing -> pure Nothing
     Just (CompilationUnit mPkgDecl _imports _types) ->
       case mPkgDecl of
-        Nothing -> pure (Just PackageDefault)
+        Nothing -> pure Nothing
         Just (PackageDecl name) -> pure (Just (PackageName (nameToText name)))
 
 formatLocations :: [Location] -> T.Text
 formatLocations locs =
   T.concat (L.intersperse ", " (map unLocation locs))
 
--- Example: ["a", "b", "c", "b"] ~~> ["a", "b_01", "c", "b_02"]
+-- Example: ["a", "b", "c", "b"] ~~> ["a", "b_v01", "c", "b_v02"]
 addVersionsIfNecessary :: [T.Text] -> [T.Text]
 addVersionsIfNecessary l =
   let counts :: M.Map T.Text Int
@@ -444,7 +455,7 @@ addVersionsIfNecessary l =
         _ ->
           loop counts xs versionMap (x : acc)
     appendVersion i x =
-      x <> (if i < 10 then "_0" else "_") <> showText i
+      x <> (if i < 10 then "_v0" else "_v") <> showText i
     incOld _key _new _old = _old + 1
 
 groupSnippets :: [MergedSnippet] -> Fail [SnippetGroup]
@@ -505,8 +516,8 @@ concatCode c1 c2 =
 
 data Decl = Decl
   { d_id :: T.Text,
-    d_start :: JLocation,
-    d_end :: JLocation,
+    d_start :: JLocation, -- location of first token
+    d_end :: JLocation,   -- location of last token
     d_sub :: [Decl],
     d_public :: Bool
   }
@@ -551,10 +562,13 @@ memberDeclToDecl memDecl =
 
 locationToIndex :: T.Text -> JLocation -> Int
 locationToIndex t loc =
-  let lineIdx = loc_line loc
-      colIdx = loc_column loc
-      idx = eatLines t lineIdx
-   in idx + colIdx - 1
+  if JavaSyntax.isEof loc
+    then T.length t
+    else
+      let lineIdx = loc_line loc
+          colIdx = loc_column loc
+          idx = eatLines t lineIdx
+       in idx + colIdx - 1
   where
     -- Returns the number of character until line i (index starts at 1)
     eatLines :: T.Text -> Int -> Int
@@ -572,7 +586,7 @@ locationToIndex t loc =
 getCode :: T.Text -> Decl -> T.Text
 getCode t d =
   let start = locationToIndex t (d_start d)
-      end = locationToIndex t (d_end d)
+      end = locationToIndex t (d_end d) + 1
    in subText start t end
 
 removeCode :: T.Text -> [Decl] -> T.Text
@@ -582,12 +596,12 @@ removeCode t decls =
         mkNonOverlapping $
           L.sort $
             map (\d -> (locationToIndex t (d_start d), locationToIndex t (d_end d))) decls
-   in foldr (\(start, end) acc -> deleteText start acc end) t startEndIdxs
+   in foldr (\(start, end) acc -> deleteText start acc (1 + end)) t startEndIdxs
   where
     mkNonOverlapping [] = []
     mkNonOverlapping [x] = [x]
     mkNonOverlapping ((start, end) : rest@((start2, _) : _)) =
-      (start, min end start2) : mkNonOverlapping rest
+      (start, min end (start2 - 1)) : mkNonOverlapping rest
 
 insertCode :: T.Text -> JLocation -> T.Text -> T.Text
 insertCode t loc toInsert =
@@ -602,20 +616,26 @@ mergeWithPrev ::
   MergedSnippet -> M.Map T.Text Decl -> MergedSnippet -> [Decl] -> AddLocation -> MergedSnippet
 mergeWithPrev prevSnip prevDecls thisSnip thisDecls addLoc =
   let (toReplace, toAppend) = replaceOrAppend prevDecls thisDecls ([], [])
-      cleanPrev = removeCode (ms_baseSnippets prevSnip) (map fst toReplace)
+      oldPrev = ms_baseSnippets prevSnip
+      cleanPrev = removeCode oldPrev (map fst toReplace)
       newCodePieces = map (getCode (ms_baseSnippets thisSnip)) (map snd toReplace ++ toAppend)
       newCode = L.foldl' concatCode "" newCodePieces
       newBase =
         case addLoc of
           AddAtEnd -> cleanPrev `concatCode` newCode
-          AddHere loc -> insertCode cleanPrev loc ("    " <> newCode <> "\n")
+          AddHere loc ->
+            -- loc is the location of the last token (the `}`) from oldPrev.
+            -- We delete some content from oldPrev, so we need to compensate
+            let lenRemoved = T.length oldPrev - T.length cleanPrev
+                idx = locationToIndex oldPrev loc - lenRemoved
+            in insertText idx cleanPrev ("    " <> newCode <> "\n")
    in thisSnip {ms_baseSnippets = newBase}
   where
     replaceOrAppend ::
       M.Map T.Text Decl ->
       [Decl] ->
       ([(Decl, Decl)], [Decl]) ->
-      ([(Decl, Decl)], [Decl])
+      ([(Decl, Decl)], [Decl]) -- ([(declToRemove, replacement)], [declToAppend])
     replaceOrAppend _ [] (repl, app) = (reverse repl, reverse app)
     replaceOrAppend prevDecls (d : ds) (repl, app) =
       case M.lookup (d_id d) prevDecls of
@@ -675,7 +695,9 @@ mergeMembers prevSnip prevCu snip methods = do
           ( formatLocations (ms_locations snip)
               <> ": no main class found in preceding snippet but this snippets defines methods"
           )
-      Just mc ->
+      Just mc -> do
+        debugM ("Merging " ++ show (length methods) ++ " methods intro main class " ++
+                show mc ++ " from previous compilation unit ...")
         pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
   where
     addSubs :: M.Map T.Text Decl -> Decl -> M.Map T.Text Decl
@@ -764,18 +786,28 @@ snippetGroupToJSnippets key group =
 
 -- Orchestration
 
-processSnippets :: CodeFilePath -> [CodeSnippet] -> Fail [JSnippet]
+processSnippets :: CodeFilePath -> [CodeSnippet] -> Action [JSnippet]
 processSnippets key snippets = do
+  debug ("snippets: " ++ show snippets)
   -- Step 1
-  snippets <- mapM rewrite snippets
-  -- Step 2&3
-  merged <- append snippets >>= merge
+  snippets <- failInM $ mapM rewrite snippets
+  debug ("After step 1, snippets: " ++ show snippets)
+  -- Step 2
+  snippetsList <- failInM (append snippets)
+  debug ("After step 2, snippetsList: " ++ show snippetsList)
+  -- Step 3
+  merged <- failInM (merge snippetsList)
+  debug ("After step 3, merged: " ++ show merged)
   -- Step 4
-  groups <- groupSnippets merged
+  groups <- failInM (groupSnippets merged)
+  debug ("After step 4, groups: " ++ show groups)
   -- Step 5
-  newGroups <- mapM updateGroup groups
+  newGroups <- failInM (mapM updateGroup groups)
+  debug ("After step 5, newGroups: " ++ show newGroups)
   -- Step 6
-  concatMapM (snippetGroupToJSnippets key) newGroups
+  result <- failInM (concatMapM (snippetGroupToJSnippets key) newGroups)
+  debug ("After step 6, result: " ++ show result)
+  pure result
 
 jsnippetCode :: [CodeSnippet] -> JSnippet -> [CodeSnippet] -> T.Text
 jsnippetCode start snip end =
@@ -791,8 +823,8 @@ jsnippetCode start snip end =
             "public static void __body_" <> idFromCode code <> "() throws Exception {\n"
               <> code
               <> "\n}"
-          methodsForTests = flip map tests $ \code ->
-            "@Test public void __body_" <> idFromCode code <> "() throws Exception {\n"
+          methodsForTests = flip map tests $ \(JTest testName code) ->
+            "@Test public void " <> unTestName testName <> "() throws Exception {\n"
               <> code
               <> "\n}"
           allMethods = methods ++ methodsForBodies ++ methodsForTests
@@ -803,7 +835,7 @@ jsnippetCode start snip end =
                in "class __CodeContainer {\n" <> code <> "\n}"
 
 outputJSnippet ::
-  BuildArgs ->
+  FilePath ->
   T.Text ->
   [CodeSnippet] ->
   JSnippet ->
@@ -811,7 +843,7 @@ outputJSnippet ::
   [JSnippet] ->
   S.Set CodeFilePath ->
   Action ()
-outputJSnippet _buildArgs header start snip end allSnippets allKeys = do
+outputJSnippet outDir header start snip end allSnippets allKeys = do
   let code = jsnippetCode start snip end
       key =
         case js_key snip of
@@ -821,11 +853,11 @@ outputJSnippet _buildArgs header start snip end allSnippets allKeys = do
               then Nothing
               else Just fp
       groupId =
-        if moreThanOne js_group
+        if moreThanOne js_key js_group
           then Just (T.unpack (unGroupId $ js_group snip))
           else Nothing
       version =
-        if moreThanOne (\x -> (js_group x, js_version x))
+        if moreThanOne (\x -> (js_key x, js_group x)) js_version
           then
             let v = unVersion (js_version snip)
                 versionDir = "v" ++ (if v < 10 then "0" else "") ++ show v
@@ -836,14 +868,18 @@ outputJSnippet _buildArgs header start snip end allSnippets allKeys = do
           PackageDefault -> Nothing
           PackageName p -> Just (T.unpack p)
       dir =
-        concat $ L.intersperse "/" $ catMaybes [key, groupId, version, pkgName]
+        outDir </>
+        (concat $ L.intersperse "/" $ catMaybes [key, groupId, version, pkgName])
       file = dir </> T.unpack (unClassName (js_mainClass snip)) <.> "java"
   note ("Generating " ++ file)
   myWriteFile file (header <> code)
   where
-    moreThanOne extract =
+    moreThanOne groupingExtract extract =
       let loop [] = False
-          loop (x : xs) = extract x /= extract snip || loop xs
+          loop (x : xs) =
+            (groupingExtract x == groupingExtract snip &&
+             extract x /= extract snip)
+            || loop xs
        in loop allSnippets
 
 processCodeMap ::
@@ -855,11 +891,12 @@ processCodeMap ::
   [CodeSnippet] ->
   Action ()
 processCodeMap _buildCfg buildArgs _langCfg header cm allSnippets = do
+  let outDir = pluginDir (PluginName (lc_name javaLangConfig))
   forM_ (M.toList cm) $ \(k, ccf) -> do
-    jSnippets <- failInM $ processSnippets k (ccf_here ccf)
+    jSnippets <- processSnippets k (ccf_here ccf)
     forM_ jSnippets $ \snip ->
       outputJSnippet
-        buildArgs
+        outDir
         header
         (ccf_atStart ccf)
         snip
@@ -867,11 +904,11 @@ processCodeMap _buildCfg buildArgs _langCfg header cm allSnippets = do
         jSnippets
         (M.keysSet cm)
   let fullCode = header <> snippetsToText allSnippets
-      file = takeBaseName (ba_inputFile buildArgs) <.> "java"
+      file = outDir </> takeBaseName (ba_inputFile buildArgs) <.> "java"
   myWriteFile file fullCode
 
 javaLangConfig :: LangConfig
 javaLangConfig =
   (mkLangConfig "java" ".java" "// " Nothing processCodeMap)
-    { lc_extraArgs = ["method", "body", "test", "append", "standalone"]
+    { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear"]
     }

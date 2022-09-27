@@ -7,15 +7,14 @@ This is a test for the java plugin
 The following will be added to the start of each snippet with the default key.
 
 ~~~java(place:"atStart")
-import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-import org.junit.jupiter.api.Test;
+// Comment added to the top
 ~~~
 
 Class C1 does not compile without C2.
 
 ~~~java
+import java.util.*;
+
 class C1 {
     C2 f;
     List<String> g;
@@ -65,6 +64,11 @@ class C2 {}
 ~~~java
 package foo;
 
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
 class C1 {
     void bar() {}
 }
@@ -81,16 +85,24 @@ public static void main(String[] args) {
 }
 ~~~
 
-We can replace a previously defined method:
+We can replace a previously defined method (and add a new one):
 
 ~~~java
 double foo() { return 2; }
+void spam() {}
 ~~~
 
 Methods are matched by name only, so the following method also replaces the one previously defined.
 
 ~~~java
 double foo(int x) { return x + 1; }
+void egg() {}
+public static void main(String[] args) {
+    C2 c = new C2();
+    System.out.println(c.foo(1));
+    c.spam();
+    c.egg();
+}
 ~~~
 
 We can also replace methods in classes that are not the main class:
@@ -133,10 +145,8 @@ public static void bar() { foo(); }
 
 We can also define tests:
 
-~~~java(test:true)
-public void testBlub() {
-    assertEqual(1, 1);
-}
+~~~java(test:"blub")
+assertEquals(1, 1);
 ~~~
 
 Using the file argument, we can have a completely different branch of snippets.

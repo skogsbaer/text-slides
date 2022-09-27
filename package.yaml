@@ -79,6 +79,7 @@ tests:
       - heredoc
       - HTF
       - language-java
+      - process
       - safe
       - temporary
       - text-slides

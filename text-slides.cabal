@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 449e82874404bc6fd9ca848551f3a13fafad3951d08c7e8527255be9a8e84c98
+-- hash: 3583b27f33c429531edc8ff81d50afc7db7b936428bd0a23b4c4a59ae574ccae
 
 name:           text-slides
 version:        0.1
@@ -171,6 +171,7 @@ test-suite unit-tests
     , filepath
     , heredoc
     , language-java
+    , process
     , safe
     , temporary
     , text
