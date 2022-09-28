@@ -158,3 +158,7 @@ clear:true starts from scratch
 ~~~java(file:"alternative", clear:true)
 class C3{}
 ~~~
+
+~~~java(file:"alternative2")
+class C1{}
+~~~

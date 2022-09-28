@@ -62,7 +62,6 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
   let pluginDir = outDir </> "build/plugins/java/"
       referenceDir = "test/data/test_java_reference"
   genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
-  putStrLn (show genFiles)
   let expectedFiles = javaFiles pluginDir
       stripOutDir l =
         flip map l $ \s -> fromMaybe s (L.stripPrefix (outDir ++ "/") s)
@@ -96,6 +95,7 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
           outAlt1 = dir </> "alternative/default_pkg_v01/v01/C1.java"
           outAlt2 = dir </> "alternative/default_pkg_v01/v02/C1.java"
           outAlt3 = dir </> "alternative/default_pkg_v02/C3.java"
+          outAlt4 = dir </> "alternative2/C1.java"
        in [ outAll,
             outDef1,
             outDef2,
@@ -109,5 +109,6 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
             outFoo8,
             outAlt1,
             outAlt2,
-            outAlt3
+            outAlt3,
+            outAlt4
           ]

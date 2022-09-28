@@ -845,7 +845,7 @@ outputJSnippet outDir header start snip end allSnippets allKeys = do
         case js_key snip of
           CodeFilePathDefault -> Nothing
           CodeFilePathCustom fp ->
-            if S.size allKeys > 2
+            if S.size allKeys < 2
               then Nothing
               else Just fp
       groupId =
@@ -886,20 +886,22 @@ processCodeMap ::
   CodeMap ->
   [CodeSnippet] ->
   Action ()
-processCodeMap _buildCfg buildArgs _langCfg header cm allSnippets = do
+processCodeMap _buildCfg buildArgs _langCfg header cm allCodeSnippets = do
   let outDir = pluginDir (PluginName (lc_name javaLangConfig))
-  forM_ (M.toList cm) $ \(k, ccf) -> do
-    jSnippets <- processSnippets k (ccf_here ccf)
-    forM_ jSnippets $ \snip ->
-      outputJSnippet
-        outDir
-        header
-        (ccf_atStart ccf)
-        snip
-        (ccf_atEnd ccf)
-        jSnippets
-        (M.keysSet cm)
-  let fullCode = header <> snippetsToText allSnippets
+  jSnippetsWithStartEnd <- flip concatMapM (M.toList cm) $ \(k, ccf) -> do
+    l <- processSnippets k (ccf_here ccf)
+    pure $ map (\j -> (ccf_atStart ccf, j, ccf_atEnd ccf)) l
+  let allJSnippets = map (\(_, j, _) -> j) jSnippetsWithStartEnd
+  forM_ jSnippetsWithStartEnd $ \(start, snip, end) ->
+    outputJSnippet
+      outDir
+      header
+      start
+      snip
+      end
+      allJSnippets
+      (M.keysSet cm)
+  let fullCode = header <> snippetsToText allCodeSnippets
       file = outDir </> takeBaseName (ba_inputFile buildArgs) <.> "java"
   myWriteFile file fullCode
 
