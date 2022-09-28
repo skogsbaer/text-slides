@@ -857,7 +857,7 @@ outputJSnippet outDir header start snip end allSnippets allKeys = do
           CodeFilePathCustom fp ->
             if S.size allKeys < 2
               then Nothing
-              else Just fp
+              else Just (dropExtensions fp)
       groupId =
         if moreThanOne js_key js_group
           then Just (T.unpack (unGroupId $ js_group snip))
@@ -918,5 +918,5 @@ processCodeMap _buildCfg buildArgs _langCfg header cm allCodeSnippets = do
 javaLangConfig :: LangConfig
 javaLangConfig =
   (mkLangConfig "java" ".java" "// " Nothing processCodeMap)
-    { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear"]
+    { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear", "rewrite"]
     }
