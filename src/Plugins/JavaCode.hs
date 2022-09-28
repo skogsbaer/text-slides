@@ -410,7 +410,7 @@ merge snips = do
           in loop (Just newCtx) rest
         False ->
           case k of
-            SnippetKindRegular -> do
+            SnippetKindRegular | not (null (pms_baseSnippets ms)) -> do
               let newCtx = addToPreMergedSnippet k snip emptyPreMergedSnippet False
               restResult <- loop (Just newCtx) rest
               pure (ms : restResult)

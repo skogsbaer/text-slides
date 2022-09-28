@@ -178,6 +178,10 @@ class Foo { Bar f; } // type Bar does not exist
 
 append:true appends to the nearest snippet of the same type
 
+~~~java(file:"Append", method:true)
+void foo() {
+~~~
+
 ~~~java(file:"Append")
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
@@ -185,10 +189,6 @@ import org.junit.jupiter.api.Test;
 class C1 {
   C2 f;
 }
-~~~
-
-~~~java(file:"Append", method:true)
-void foo() {
 ~~~
 
 ~~~java(file:"Append", append:true)
