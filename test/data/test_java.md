@@ -175,3 +175,44 @@ class C1{}
 ~~~java(file:"alternative2", mode:"showOnly")
 class Foo { Bar f; } // type Bar does not exist
 ~~~
+
+append:true appends to the nearest snippet of the same type
+
+~~~java(file:"Append")
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+class C1 {
+  C2 f;
+}
+~~~
+
+~~~java(file:"Append", method:true)
+void foo() {
+~~~
+
+~~~java(file:"Append", append:true)
+class C2 {}
+~~~
+
+~~~java(file:"Append", method:true, append:true)
+}
+~~~
+
+~~~java(file:"Append", body:true, standalone:false)
+int x = 1;
+~~~
+
+~~~java(file:"Append", body:true)
+int y = x + 5;
+~~~
+
+~~~java(file:"Append", test:"fooTest")
+int a = 1;
+~~~
+
+With append:true, the test name is irrelevant.
+
+~~~java(file:"Append", test:"", append:true)
+int b = a + 2;
+~~~

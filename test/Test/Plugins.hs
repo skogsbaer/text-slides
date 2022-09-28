@@ -98,6 +98,7 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
           outAlt2 = codeDir </> "alternative/default_pkg_v01/v02/C1.java"
           outAlt3 = codeDir </> "alternative/default_pkg_v02/C3.java"
           outAlt4 = codeDir </> "alternative2/C1.java"
+          outAppend = codeDir </> "Append/C1.java"
        in [ outAll,
             outDef1,
             outDef2,
@@ -112,5 +113,6 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
             outAlt1,
             outAlt2,
             outAlt3,
-            outAlt4
+            outAlt4,
+            outAppend
           ]

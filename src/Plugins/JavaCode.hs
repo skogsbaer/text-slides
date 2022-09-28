@@ -254,39 +254,25 @@ rewrite snip = do
                   _ -> "{ return null; }"
            in T.replace "{ ... }" repl (T.replace "{...}" repl line)
 
--- STEP 2
-append :: [CodeSnippet] -> Fail [[CodeSnippet]]
-append snips = do
-  annotatedSnips <- annotateAppend snips
-  loop Nothing annotatedSnips
-  where
-    annotateAppend :: [CodeSnippet] -> Fail [(CodeSnippet, Bool)] -- bool flag for append
-    annotateAppend [] = pure []
-    annotateAppend (x : xs) = do
-      append <- getArg "append" x False
-      standalone <- getArg "standalone" x True
-      xs' <- annotateAppend xs
-      case (standalone, xs') of
-        (False, ((y, _) : rest)) -> pure $ (x, append) : (y, True) : rest
-        (True, rest) -> pure $ (x, append) : rest
-        (False, []) ->
-          Left
-            ( unLocation (cc_location x)
-                <> ": standalone:false for last snippet of a group"
-            )
-    getArg k x def = fromMaybe def <$> getOptionalBoolValue (cc_location x) k (cc_args x)
-    loop :: Maybe [CodeSnippet] -> [(CodeSnippet, Bool)] -> Fail [[CodeSnippet]]
-    loop Nothing [] = pure [[]]
-    loop Nothing (x : xs) = loop (Just [fst x]) xs
-    loop (Just cur) [] = pure [cur]
-    loop (Just cur) ((x, b) : xs) = do
-      if not b
-        then do
-          rest <- loop (Just [x]) xs
-          pure (cur : rest)
-        else loop (Just (cur ++ [x])) xs
+-- STEP 2&3
 
--- STEP 3
+annotateAppend :: [CodeSnippet] -> Fail [(CodeSnippet, Bool)] -- bool flag for append
+annotateAppend [] = pure []
+annotateAppend (x : xs) = do
+  append <- getArg "append" x False
+  standalone <- getArg "standalone" x True
+  xs' <- annotateAppend xs
+  case (standalone, xs') of
+    (False, ((y, _) : rest)) -> pure $ (x, append) : (y, True) : rest
+    (True, rest) -> pure $ (x, append) : rest
+    (False, []) ->
+      Left
+        ( unLocation (cc_location x)
+            <> ": standalone:false for last snippet of a group"
+        )
+  where
+    getArg k x def = fromMaybe def <$> getOptionalBoolValue (cc_location x) k (cc_args x)
+
 data PreMergedSnippet = PreMergedSnippet
   { pms_baseSnippets :: [CodeSnippet],
     pms_methodSnippets :: [[CodeSnippet]],
@@ -305,14 +291,33 @@ data SnippetKind
 emptyPreMergedSnippet :: PreMergedSnippet
 emptyPreMergedSnippet = PreMergedSnippet [] [] [] []
 
-addToPreMergedSnippet :: SnippetKind -> [CodeSnippet] -> PreMergedSnippet -> PreMergedSnippet
-addToPreMergedSnippet k snips pms =
+appendAtLast :: [[a]] -> a -> [[a]]
+appendAtLast ll x = modifyLast ll (\l -> l ++ [x]) [[x]]
+
+modifyLast :: [a] -> (a -> a) -> [a] -> [a]
+modifyLast l f def =
+  case reverse l of
+    [] -> def
+    y : ys -> reverse (f y : ys)
+
+addToPreMergedSnippet :: SnippetKind -> CodeSnippet -> PreMergedSnippet -> Bool -> PreMergedSnippet
+addToPreMergedSnippet k snip pms append =
   case k of
-    SnippetKindRegular -> pms {pms_baseSnippets = pms_baseSnippets pms ++ snips}
-    SnippetKindBody -> pms {pms_bodySnippets = pms_bodySnippets pms ++ [snips]}
-    SnippetKindMethod -> pms {pms_methodSnippets = pms_methodSnippets pms ++ [snips]}
+    SnippetKindRegular -> pms { pms_baseSnippets = pms_baseSnippets pms ++ [snip] }
+    SnippetKindBody -> pms { pms_bodySnippets = doAppend (pms_bodySnippets pms) snip }
+    SnippetKindMethod -> pms { pms_methodSnippets = doAppend (pms_methodSnippets pms) snip }
     SnippetKindTest testName ->
-      pms {pms_testSnippets = pms_testSnippets pms ++ [(TestName testName, snips)]}
+      case append of
+        False -> pms { pms_testSnippets = (pms_testSnippets pms) ++ [(TestName testName, [snip])]}
+        True ->
+          pms { pms_testSnippets =
+                modifyLast (pms_testSnippets pms) (\(name, l) -> (name, l ++ [snip]))
+                  [(TestName testName, [snip])]
+              }
+  where
+    doAppend :: [[a]] -> a -> [[a]]
+    doAppend ll x =
+      if append then appendAtLast ll x else ll ++ [[x]]
 
 snippetKind :: CodeSnippet -> Fail SnippetKind
 snippetKind cs = do
@@ -332,9 +337,10 @@ snippetKind cs = do
 snippetsToText :: [CodeSnippet] -> T.Text
 snippetsToText = mkCode javaLangConfig
 
-merge :: [[CodeSnippet]] -> Fail [MergedSnippet]
-merge xss = do
-  pms <- loop Nothing xss
+merge :: [CodeSnippet] -> Fail [MergedSnippet]
+merge snips = do
+  annotatedSnips <- annotateAppend snips
+  pms <- loop Nothing annotatedSnips
   mapM toMergedSnippet pms
   where
     toMergedSnippet :: PreMergedSnippet -> Fail MergedSnippet
@@ -354,25 +360,28 @@ merge xss = do
               map (\(name, cs) -> JTest name (snippetsToText cs)) (pms_testSnippets pms),
             ms_locations = map cc_location (pms_baseSnippets pms)
           }
-    loop :: Maybe PreMergedSnippet -> [[CodeSnippet]] -> Fail [PreMergedSnippet]
+    loop :: Maybe PreMergedSnippet -> [(CodeSnippet, Bool)] -> Fail [PreMergedSnippet]
     loop Nothing [] = pure [emptyPreMergedSnippet]
     loop (Just ms) [] = pure [ms]
-    loop ctx (ys : yss) =
-      case ys of
-        [] -> loop ctx yss
-        (snip : _) -> do
-          k <- snippetKind snip
+    loop Nothing ((snip, _append) : rest) = do
+      k <- snippetKind snip
+      let newCtx = addToPreMergedSnippet k snip emptyPreMergedSnippet False
+      loop (Just newCtx) rest
+    loop (Just ms) ((snip, append) : rest) = do
+      k <- snippetKind snip
+      case append of
+        True ->
+          let newCtx = addToPreMergedSnippet k snip ms True
+          in loop (Just newCtx) rest
+        False ->
           case k of
             SnippetKindRegular -> do
-              let newCtx = addToPreMergedSnippet k ys emptyPreMergedSnippet
-              rest <- loop (Just newCtx) yss
-              case ctx of
-                Nothing -> pure rest
-                Just ms -> pure (ms : rest)
+              let newCtx = addToPreMergedSnippet k snip emptyPreMergedSnippet False
+              restResult <- loop (Just newCtx) rest
+              pure (ms : restResult)
             _ -> do
-              let ms = fromMaybe emptyPreMergedSnippet ctx
-                  newCtx = addToPreMergedSnippet k ys ms
-              loop (Just newCtx) yss
+              let newCtx = addToPreMergedSnippet k snip ms False
+              loop (Just newCtx) rest
 
 -- STEP 4
 
@@ -799,12 +808,9 @@ processSnippets key snippets = do
   -- Step 1
   snippets <- failInM $ mapM rewrite snippets
   debug ("After step 1, snippets: " ++ show snippets)
-  -- Step 2
-  snippetsList <- failInM (append snippets)
-  debug ("After step 2, snippetsList: " ++ show snippetsList)
-  -- Step 3
-  merged <- failInM (merge snippetsList)
-  debug ("After step 3, merged: " ++ show merged)
+  -- Step 2&3
+  merged <- failInM (merge snippets)
+  debug ("After step 2&3, merged: " ++ show merged)
   -- Step 4
   groups <- failInM (groupSnippets merged)
   debug ("After step 4, groups: " ++ show groups)
