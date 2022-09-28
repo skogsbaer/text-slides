@@ -539,7 +539,11 @@ compilationUnitToDecls (CompilationUnit _ _ typeDecls) =
             Decl (identToText ident) locStart locEnd (mapMaybe declToDecl decls) (isPublic mods)
           EnumDecl (locStart, locEnd) mods ident _ (EnumBody _ decls) ->
             Decl (identToText ident) locStart locEnd (mapMaybe declToDecl decls) (isPublic mods)
-    typeDeclToDecl (InterfaceTypeDecl _) = Nothing
+    typeDeclToDecl (InterfaceTypeDecl ifaceDecl) =
+      Just $
+      case ifaceDecl of
+        InterfaceDecl (locStart, locEnd) _ mods ident _ _ _ _ ->
+            Decl (identToText ident) locStart locEnd [] (isPublic mods)
     declToDecl (JavaSyntax.MemberDecl memDecl) = memberDeclToDecl memDecl
     declToDecl (JavaSyntax.InitDecl _ _) = Nothing
 
@@ -765,6 +769,13 @@ snippetGroupToJSnippets key group =
   mapM toJSnippet (zip [1 ..] (sg_snippets group))
   where
     toJSnippet (v, ms) = do
+      let mClsNameFromKey =
+            case key of
+              CodeFilePathDefault -> Nothing
+              CodeFilePathCustom fp ->
+                if ".java" `L.isSuffixOf` fp
+                  then Just (ClassName $ T.pack $ takeBaseName fp)
+                  else Nothing
       mClsName <- getMainClassName (ms_locations ms) (ms_baseSnippets ms)
       pure $
         JSnippet
@@ -776,7 +787,7 @@ snippetGroupToJSnippets key group =
             js_version = Version v,
             js_package = sg_package group,
             js_group = sg_groupId group,
-            js_mainClass = fromMaybe (ClassName "Main") mClsName,
+            js_mainClass = fromMaybe (ClassName "Main") (mClsNameFromKey `mplus` mClsName),
             js_key = key
           }
 
@@ -813,10 +824,9 @@ jsnippetCode start snip end =
    in startCode `concatCode` snipCode `concatCode` endCode
         `concatCode` container (js_bodySnippets snip) (js_methodSnippets snip) (js_testSnippets snip)
   where
-    idFromCode code = unHash (md5OfText code)
     container bodies methods tests =
-      let methodsForBodies = flip map bodies $ \code ->
-            "public static void __body_" <> idFromCode code <> "() throws Exception {\n"
+      let methodsForBodies = flip map (zip [1..] bodies) $ \(i, code) ->
+            "public static void __body_" <> showText i <> "() throws Exception {\n"
               <> code
               <> "\n}"
           methodsForTests = flip map tests $ \(JTest testName code) ->

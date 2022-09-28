@@ -14,17 +14,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 
-public class C2 {    
+public class C2 {
 //[test_java.md:80]
 
 
 
-    
+
 //[test_java.md:90]
 
 
 void spam() {}
-    
+
 //[test_java.md:97]
 double foo(int x) { return x + 1; }
 
@@ -60,7 +60,7 @@ public static void bar() { foo(); }
 
 
 
-public static void __body_930919905fe2c68aeffe305fdcc74fcc() throws Exception {
+public static void __body_1() throws Exception {
 
 //[test_java.md:124]
 C3 c = new C3();

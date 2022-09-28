@@ -54,7 +54,8 @@ compareJava :: FilePath -> FilePath -> IO ()
 compareJava reference generated = do
   refCu <- parseJava reference
   genCu <- parseJava generated
-  unless (refCu == genCu) $
+  unless (refCu == genCu) $ do
+    _ <- system ("diff -u " ++ reference ++ " " ++ generated)
     fail ("Generated file " ++ generated ++ " differs from reference file " ++ reference)
 
 test_java :: IO ()

@@ -1,4 +1,4 @@
-//Automatically extracted from test_java.md on 2022-09-27 19:49:10.436604 UTC
+//Automatically extracted from test_java.md on 2022-09-28 05:07:11.819901 UTC
 
 
 //[test_java.md:9]
@@ -16,4 +16,8 @@ class C1 {
 
 //[test_java.md:26]
 class C2 {}
+
+
+//[test_java.md:30]
+class OtherC2 {}
 

@@ -27,19 +27,28 @@ C2 is defined in the next snippet with `append:true`
 class C2 {}
 ~~~
 
+~~~java(append:true)
+class OtherC2 {}
+~~~
+
 Another way of expressing the same is using `standalone:false`
 
 ~~~java(standalone:false)
 class C3 {
     C4 f;
     List<String> g;
+    C5 h;
 }
 ~~~
 
 and then
 
+~~~java(standalone:false)
+interface C4 {}
+~~~
+
 ~~~java
-class C4 {}
+class C5{}
 ~~~
 
 The snippets above are all concatenated together. Two different .java files are generated:
