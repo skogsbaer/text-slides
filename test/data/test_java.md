@@ -199,6 +199,10 @@ class C2 {}
 }
 ~~~
 
+~~~java(file:"Append", body:"blub")
+int a = 2;
+~~~
+
 ~~~java(file:"Append", body:true, standalone:false)
 int x = 1;
 ~~~
@@ -211,8 +215,10 @@ int y = x + 5;
 int a = 1;
 ~~~
 
-With append:true, the test name is irrelevant.
-
-~~~java(file:"Append", test:"", append:true)
+~~~java(file:"Append", test:true, append:true)
 int b = a + 2;
+~~~
+
+~~~java(file:"Append", body:"blub")
+int b = a + 1;
 ~~~

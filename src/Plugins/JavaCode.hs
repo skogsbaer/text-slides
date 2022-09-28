@@ -57,7 +57,7 @@ The Java code plugin supports the following extra arguments for each code snippe
   Assumes that the code is a method. Places the code inside class __CodeContainer.
   Default: false
 
-- body:BOOL
+- body:BOOL or body:NAME
   Assumes that the code is a method body.  Places the code inside some fresh method of
   class __CodeContainer.
   Default: false
@@ -103,8 +103,17 @@ newtype TestName = TestName { unTestName :: T.Text }
   deriving (Eq, Show)
 
 data JTest = JTest
-  { jt_name :: TestName
+  { jt_name :: Maybe TestName
   , jt_code :: T.Text
+  }
+  deriving (Eq, Show)
+
+newtype BodyName = BodyName { unBodyName :: T.Text }
+  deriving (Eq, Show)
+
+data JBody = JBody
+  { jb_name :: Maybe BodyName
+  , jb_code :: T.Text
   }
   deriving (Eq, Show)
 
@@ -112,7 +121,7 @@ data MergedSnippet = MergedSnippet
   { ms_clear :: Bool,
     ms_baseSnippets :: T.Text,
     ms_methodSnippets :: [T.Text],
-    ms_bodySnippets :: [T.Text],
+    ms_bodySnippets :: [JBody],
     ms_testSnippets :: [JTest],
     ms_locations :: [Location]
   }
@@ -186,7 +195,7 @@ newtype Version = Version {unVersion :: Int}
 data JSnippet = JSnippet
   { js_baseSnippets :: T.Text,
     js_methodSnippets :: [T.Text],
-    js_bodySnippets :: [T.Text],
+    js_bodySnippets :: [JBody],
     js_testSnippets :: [JTest],
     js_locations :: [Location],
     js_version :: Version,
@@ -276,16 +285,16 @@ annotateAppend (x : xs) = do
 data PreMergedSnippet = PreMergedSnippet
   { pms_baseSnippets :: [CodeSnippet],
     pms_methodSnippets :: [[CodeSnippet]],
-    pms_bodySnippets :: [[CodeSnippet]],
-    pms_testSnippets :: [(TestName, [CodeSnippet])]
+    pms_bodySnippets :: [(Maybe BodyName, [CodeSnippet])],
+    pms_testSnippets :: [(Maybe TestName, [CodeSnippet])]
   }
   deriving (Eq, Show)
 
 data SnippetKind
   = SnippetKindRegular
-  | SnippetKindBody
+  | SnippetKindBody (Maybe T.Text)
   | SnippetKindMethod
-  | SnippetKindTest T.Text
+  | SnippetKindTest (Maybe T.Text)
   deriving (Eq, Show)
 
 emptyPreMergedSnippet :: PreMergedSnippet
@@ -304,35 +313,60 @@ addToPreMergedSnippet :: SnippetKind -> CodeSnippet -> PreMergedSnippet -> Bool 
 addToPreMergedSnippet k snip pms append =
   case k of
     SnippetKindRegular -> pms { pms_baseSnippets = pms_baseSnippets pms ++ [snip] }
-    SnippetKindBody -> pms { pms_bodySnippets = doAppend (pms_bodySnippets pms) snip }
+    SnippetKindBody mName ->
+      pms { pms_bodySnippets = doAppendNamed (pms_bodySnippets pms) (fmap BodyName mName, snip) }
     SnippetKindMethod -> pms { pms_methodSnippets = doAppend (pms_methodSnippets pms) snip }
-    SnippetKindTest testName ->
-      case append of
-        False -> pms { pms_testSnippets = (pms_testSnippets pms) ++ [(TestName testName, [snip])]}
-        True ->
-          pms { pms_testSnippets =
-                modifyLast (pms_testSnippets pms) (\(name, l) -> (name, l ++ [snip]))
-                  [(TestName testName, [snip])]
-              }
+    SnippetKindTest mName ->
+      pms { pms_testSnippets = doAppendNamed (pms_testSnippets pms) (fmap TestName mName, snip) }
   where
+    doAppendNamed :: Eq n => [(Maybe n, [a])] -> (Maybe n, a) -> [(Maybe n, [a])]
+    -- unnamed: append to last or create new (depending on value of append)
+    doAppendNamed ll (Nothing, x) = doAppendNamed' ll (Nothing, x)
+    -- named: append to one with same name (if exists, independent from value of append)
+    -- otherwise proceed as in unnamed case
+    doAppendNamed ll (Just name, x) =
+      case L.span (\(mName, _) -> mName /= Just name) ll of
+        (_, []) -> doAppendNamed' ll (Just name, x) -- nothing found
+        (prefix, (sameName, xs) : suffix) ->
+          prefix ++ ((sameName, xs ++ [x]) : suffix)
     doAppend :: [[a]] -> a -> [[a]]
     doAppend ll x =
       if append then appendAtLast ll x else ll ++ [[x]]
+    doAppendNamed' :: [(Maybe n, [a])] -> (Maybe n, a) -> [(Maybe n, [a])]
+    doAppendNamed' ll (name, x) =
+      if append
+        then modifyLast ll (\(n, l) -> (n, l ++ [x])) [(name, [x])]
+        else ll ++ [(name, [x])]
+
+data BoolOrStringArg =
+  BoolArg Bool
+  | StringArg T.Text
 
 snippetKind :: CodeSnippet -> Fail SnippetKind
 snippetKind cs = do
   m <- get "method"
-  b <- get "body"
-  t <- getOptionalStringValue loc "test" (cc_args cs)
+  b <- getBoolOrString "body"
+  t <- getBoolOrString "test"
   case (m, b, t) of
-    (True, False, Nothing) -> pure SnippetKindMethod
-    (False, True, Nothing) -> pure SnippetKindBody
-    (False, False, Just t) -> pure (SnippetKindTest t)
-    (False, False, Nothing) -> pure SnippetKindRegular
+    (True, BoolArg False, BoolArg False) -> pure SnippetKindMethod
+    (False, BoolArg True, BoolArg False) -> pure (SnippetKindBody Nothing)
+    (False, StringArg t, BoolArg False) -> pure (SnippetKindBody (Just t))
+    (False, BoolArg False, BoolArg True) -> pure (SnippetKindTest Nothing)
+    (False, BoolArg False, StringArg t) -> pure (SnippetKindTest (Just t))
+    (False, BoolArg False, BoolArg False) -> pure SnippetKindRegular
     _ -> Left "Can have only one of the arguments method, body, and test"
   where
     loc = cc_location cs
     get k = fromMaybe False <$> getOptionalBoolValue loc k (cc_args cs)
+    getBoolOrString k =
+      case getOptionalBoolValue loc k (cc_args cs) of
+        Right (Just b) -> Right (BoolArg b)
+        Right Nothing -> Right (BoolArg False)
+        Left _ ->
+          case getOptionalStringValue loc k (cc_args cs) of
+            Right (Just s) -> Right (StringArg s)
+            Right Nothing -> Right (BoolArg False)
+            Left _ -> Left ("Value for " <> k <> " must either be a bool or a string")
 
 snippetsToText :: [CodeSnippet] -> T.Text
 snippetsToText = mkCode javaLangConfig
@@ -355,7 +389,8 @@ merge snips = do
           { ms_clear = clear,
             ms_baseSnippets = snippetsToText (pms_baseSnippets pms),
             ms_methodSnippets = map snippetsToText (pms_methodSnippets pms),
-            ms_bodySnippets = map snippetsToText (pms_bodySnippets pms),
+            ms_bodySnippets =
+              map (\(name, cs) -> JBody name (snippetsToText cs)) (pms_bodySnippets pms),
             ms_testSnippets =
               map (\(name, cs) -> JTest name (snippetsToText cs)) (pms_testSnippets pms),
             ms_locations = map cc_location (pms_baseSnippets pms)
@@ -831,14 +866,16 @@ jsnippetCode start snip end =
         `concatCode` container (js_bodySnippets snip) (js_methodSnippets snip) (js_testSnippets snip)
   where
     container bodies methods tests =
-      let methodsForBodies = flip map (zip [1..] bodies) $ \(i, code) ->
-            "public static void __body_" <> showText i <> "() throws Exception {\n"
-              <> code
-              <> "\n}"
-          methodsForTests = flip map tests $ \(JTest testName code) ->
-            "@Test public void " <> unTestName testName <> "() throws Exception {\n"
-              <> code
-              <> "\n}"
+      let methodsForBodies = flip map (zip [1..] bodies) $ \(i, JBody mBodyName code) ->
+            let bodyName = fromMaybe (showText i) (fmap unBodyName mBodyName)
+            in "public static void __body_" <> bodyName <> "() throws Exception {\n"
+                 <> code
+                 <> "\n}"
+          methodsForTests = flip map (zip [1..] tests) $ \(i, JTest mTestName code) ->
+            let testName = fromMaybe ("__test_" <> showText i) (fmap unTestName mTestName)
+            in "@Test public void " <> testName <> "() throws Exception {\n"
+               <> code
+               <> "\n}"
           allMethods = methods ++ methodsForBodies ++ methodsForTests
        in if null allMethods
             then ""
