@@ -171,3 +171,7 @@ class C3{}
 ~~~java(file:"alternative2")
 class C1{}
 ~~~
+
+~~~java(file:"alternative2", mode:"showOnly")
+class Foo { Bar f; } // type Bar does not exist
+~~~

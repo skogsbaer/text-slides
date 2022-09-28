@@ -239,21 +239,21 @@ processAllCalls langCfg cfg buildArgs calls = do
       return (M.map (applyToCodeSnippets reverse) revMap, reverse revList)
     collectCode' :: (CodeMap, [CodeSnippet]) -> PluginCall -> Fail (CodeMap, [CodeSnippet])
     collectCode' (m, l) call = do
-      (file, mCode) <- codeFromCall call
-      case mCode of
-        Nothing -> return (m, l)
-        Just (place, code) ->
-          let cc =
-                CodeSnippet
-                  { cc_code = code,
-                    cc_sectionName = pc_sectionName call,
-                    cc_location = pc_location call,
-                    cc_args = pc_args call
-                  }
-           in case M.lookup file m of
-                Just ccf -> return (M.insert file (appendCodeSnippet cc place ccf) m, cc : l)
-                Nothing -> return (M.insert file (mkCodeSnippetFile cc place) m, cc : l)
-    codeFromCall :: PluginCall -> Fail (CodeFilePath, Maybe (CodePlace, Code))
+      (file, place, code, mode) <- codeFromCall call
+      let cc =
+            CodeSnippet
+            { cc_code = code,
+              cc_sectionName = pc_sectionName call,
+              cc_location = pc_location call,
+              cc_args = pc_args call
+            }
+      case mode of
+        CodeModeShowOnly -> return (m, cc : l)
+        _ ->
+           case M.lookup file m of
+             Just ccf -> return (M.insert file (appendCodeSnippet cc place ccf) m, cc : l)
+             Nothing -> return (M.insert file (mkCodeSnippetFile cc place) m, cc : l)
+    codeFromCall :: PluginCall -> Fail (CodeFilePath, CodePlace, Code, CodeMode)
     codeFromCall call = do
       args <- parseArgs call (lc_extraArgs langCfg)
       let file =
@@ -266,11 +266,7 @@ processAllCalls langCfg cfg buildArgs calls = do
           code =
             Code $
               "\n" <> cmt ("[" <> unLocation (pc_location call) <> "]") <> "\n" <> body
-      mCode <-
-        case ca_mode args of
-          CodeModeShowOnly -> return Nothing
-          _ -> return $ Just (ca_place args, code)
-      return (file, mCode)
+      return (file, ca_place args, code, ca_mode args)
     comment False t = t
     comment True t =
       T.unlines $

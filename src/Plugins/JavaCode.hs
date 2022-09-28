@@ -874,7 +874,7 @@ outputJSnippet outDir header start snip end allSnippets allKeys = do
           PackageDefault -> Nothing
           PackageName p -> Just (T.unpack p)
       dir =
-        outDir </>
+        outDir </> "code" </>
         (concat $ L.intersperse "/" $ catMaybes [key, groupId, version, pkgName])
       file = dir </> T.unpack (unClassName (js_mainClass snip)) <.> "java"
   note ("Generating " ++ file)

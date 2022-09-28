@@ -116,3 +116,4 @@ class C2{}
 //[test_java.md:158]
 class C3{}
 
+class Foo { Bar f; } // type Bar does not exist
