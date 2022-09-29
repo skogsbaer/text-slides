@@ -84,7 +84,7 @@ class C1 {
 public class C2 {} // main
 ~~~
 
-The following two methods are added to the main class:
+Methods foo and main are added to the main class, method bar to C1.
 
 ~~~java
 int foo() { return 1; }
@@ -92,6 +92,7 @@ public static void main(String[] args) {
     C2 c = new C2();
     System.out.println(c.foo());
 }
+void bar() { System.out.println("bar"); }
 ~~~
 
 We can replace a previously defined method (and add a new one):

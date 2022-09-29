@@ -8,6 +8,8 @@ where
 import qualified Language.Java.Syntax as JavaSyntax
 import Plugins.JavaCode
 import Test.Framework
+import qualified Data.List as L
+import Control.Monad
 
 type JLocation = JavaSyntax.Location
 
@@ -53,38 +55,17 @@ test_getCode = do
 mkDecl :: JLocation -> JLocation -> Decl
 mkDecl start end = Decl "foo" start end [] False
 
-test_removeCode :: IO ()
-test_removeCode = do
-  let startLoc1 = mkLoc 2 3
-      endLoc1 = mkLoc 3 1
-      decl1 = mkDecl startLoc1 endLoc1
-  assertEqual "first line{\n  \nfourth line" (removeCode code [decl1])
-  let startLoc2 = mkLoc 1 6
-      endLoc2 = mkLoc 2 3
-      decl2 = mkDecl startLoc2 endLoc2
-  assertEqual "firstecond line\n}\nfourth line" (removeCode code [decl2])
-  assertEqual "first\nfourth line" (removeCode code [decl1, decl2])
-  assertEqual "first\nfourth line" (removeCode code [decl2, decl1])
-  assertEqual
-    "ad"
-    ( removeCode
-        "abcd"
-        [mkDecl (mkLoc 1 3) (mkLoc 1 3), mkDecl (mkLoc 1 2) (mkLoc 1 2)]
-    )
-  assertEqual
-    "a"
-    ( removeCode
-        "abcd"
-        [mkDecl (mkLoc 1 3) (mkLoc 1 4), mkDecl (mkLoc 1 2) (mkLoc 1 3)]
-    )
+test_patchCode :: IO ()
+test_patchCode = do
+  let patches =
+        [ CodePatchInsert 3 "r",
+          CodePatchReplace 1 "eathe" 2,
+          CodePatchInsert 0 "A ",
+          CodePatchReplace 4 "is" 6,
+          CodePatchAppend " baz"
+        ]
+  forM_ (L.permutations patches) $ \ps ->
+    assertEqualVerbose ("ps=" ++ show ps) newCode (patchCode code ps)
   where
-    code = "first line{\n  second line\n}\nfourth line"
--- decl1                   ^            ^
--- decl2         ^         ^
-
-test_insertCode :: IO ()
-test_insertCode = do
-  let loc = mkLoc 2 3
-  assertEqual "first line{\n  FOOsecond line\n}\nfourth line" (insertCode code loc "FOO")
-  where
-    code = "first line{\n  second line\n}\nfourth line"
+    code = "foo bar"
+    newCode = "A feather is baz"

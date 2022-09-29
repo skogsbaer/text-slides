@@ -14,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class C1 {
-    void bar() {}
+    void bar() { System.out.println("bar"); }
 }
-public class C2 {    
+public class C2 {
 //[test_java.md:80]
 int foo() { return 1; }
 
@@ -25,4 +25,3 @@ public static void main(String[] args) {
     System.out.println(c.foo());
 }
 } // main
-

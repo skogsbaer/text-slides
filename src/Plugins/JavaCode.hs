@@ -4,8 +4,7 @@ module Plugins.JavaCode
     Decl (..),
     addVersionsIfNecessary,
     getCode,
-    removeCode,
-    insertCode,
+    CodePatch(..), patchCode,
     locationToIndex,
   )
 where
@@ -636,58 +635,54 @@ getCode t d =
       end = locationToIndex t (d_end d) + 1
    in subText start t end
 
-removeCode :: T.Text -> [Decl] -> T.Text
-removeCode t decls =
-  let -- sort first
-      startEndIdxs =
-        mkNonOverlapping $
-          L.sort $
-            map (\d -> (locationToIndex t (d_start d), locationToIndex t (d_end d))) decls
-   in foldr (\(start, end) acc -> deleteText start acc (1 + end)) t startEndIdxs
-  where
-    mkNonOverlapping [] = []
-    mkNonOverlapping [x] = [x]
-    mkNonOverlapping ((start, end) : rest@((start2, _) : _)) =
-      (start, min end (start2 - 1)) : mkNonOverlapping rest
+data CodePatch =
+  CodePatchReplace Int T.Text Int
+  | CodePatchInsert Int T.Text
+  | CodePatchAppend T.Text
+  deriving (Show, Eq)
 
-insertCode :: T.Text -> JLocation -> T.Text -> T.Text
-insertCode t loc toInsert =
-  let idx = locationToIndex t loc
-   in insertText idx t toInsert
+-- Locations in patches are always wrt origCode.
+-- The location of a Insert is never inside a Replace.
+-- The locations of a replace do never overlap.
+patchCode :: T.Text -> [CodePatch] -> T.Text
+patchCode origCode patches =
+  let sortedPatches = L.sortOn getStartIdx patches
+  in foldr applyPatch origCode sortedPatches
+  where
+    getStartIdx (CodePatchReplace i _ _) = i
+    getStartIdx (CodePatchInsert i _) = i
+    getStartIdx (CodePatchAppend _) = maxBound
+    applyPatch p t =
+      case p of
+        CodePatchReplace start repl end ->
+          insertText start (deleteText start t (end + 1)) repl
+        CodePatchInsert i toInsert ->
+          insertText i t toInsert
+        CodePatchAppend toAppend ->
+          t <> toAppend
 
 data AddLocation
   = AddAtEnd
   | AddHere JLocation
 
 mergeWithPrev ::
-  MergedSnippet -> M.Map T.Text Decl -> MergedSnippet -> [Decl] -> AddLocation -> MergedSnippet
+  MergedSnippet -> [(T.Text, Decl)] -> MergedSnippet -> [Decl] -> AddLocation -> MergedSnippet
 mergeWithPrev prevSnip prevDecls thisSnip thisDecls addLoc =
-  let (toReplace, toAppend) = replaceOrAppend prevDecls thisDecls ([], [])
-      oldPrev = ms_baseSnippets prevSnip
-      cleanPrev = removeCode oldPrev (map fst toReplace)
-      newCodePieces = map (getCode (ms_baseSnippets thisSnip)) (map snd toReplace ++ toAppend)
-      newCode = L.foldl' concatCode "" newCodePieces
-      newBase =
-        case addLoc of
-          AddAtEnd -> cleanPrev `concatCode` newCode
-          AddHere loc ->
-            -- loc is the location of the last token (the `}`) from oldPrev.
-            -- We delete some content from oldPrev, so we need to compensate
-            let lenRemoved = T.length oldPrev - T.length cleanPrev
-                idx = locationToIndex oldPrev loc - lenRemoved
-            in insertText idx cleanPrev ("    " <> newCode <> "\n")
-   in thisSnip {ms_baseSnippets = newBase}
+  let patches = map mkPatches thisDecls
+  in thisSnip { ms_baseSnippets = patchCode prevCode patches }
   where
-    replaceOrAppend ::
-      M.Map T.Text Decl ->
-      [Decl] ->
-      ([(Decl, Decl)], [Decl]) ->
-      ([(Decl, Decl)], [Decl]) -- ([(declToRemove, replacement)], [declToAppend])
-    replaceOrAppend _ [] (repl, app) = (reverse repl, reverse app)
-    replaceOrAppend prevDecls (d : ds) (repl, app) =
-      case M.lookup (d_id d) prevDecls of
-        Nothing -> replaceOrAppend prevDecls ds (repl, d : app)
-        Just prevD -> replaceOrAppend prevDecls ds ((prevD, d) : repl, app)
+    prevCode = ms_baseSnippets prevSnip
+    mkPatches :: Decl -> CodePatch
+    mkPatches d =
+      let thisCode = "\n" <> getCode (ms_baseSnippets thisSnip) d <> "\n"
+      in case L.lookup (d_id d) prevDecls of
+           Nothing ->
+             case addLoc of
+               AddAtEnd -> CodePatchAppend thisCode
+               AddHere loc -> CodePatchInsert (locationToIndex prevCode loc) thisCode
+           Just prevD ->
+              CodePatchReplace (locationToIndex prevCode (d_start prevD)) thisCode
+                (locationToIndex prevCode (d_end prevD))
 
 {-
   * CASE toplevel.
@@ -697,7 +692,7 @@ mergeWithPrev prevSnip prevDecls thisSnip thisDecls addLoc =
 -}
 mergeCu :: MergedSnippet -> CompilationUnit -> MergedSnippet -> CompilationUnit -> MergedSnippet
 mergeCu prevSnip prevCu snip cu =
-  let prevDecls = M.fromList (map (\d -> (d_id d, d)) (compilationUnitToDecls prevCu))
+  let prevDecls = map (\d -> (d_id d, d)) (compilationUnitToDecls prevCu)
       thisDecls = compilationUnitToDecls cu
    in mergeWithPrev prevSnip prevDecls snip thisDecls AddAtEnd
 
@@ -723,7 +718,6 @@ findMainClass cu =
     - If no such method exists, the new content of the snippet is the content of the preceding
       snippet with the method being appended to the content of the main class of the preceding
       snippet.
-  Note: currently we support replacement only in the main class.
 -}
 mergeMembers ::
   MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl] -> Fail MergedSnippet
@@ -732,10 +726,12 @@ mergeMembers prevSnip prevCu snip methods =
     Nothing ->
       Left
       ( formatLocations (ms_locations snip)
-        <> ": no main class found in preceding snippet but this snippets defines methods"
+        <> ": no main class found in preceding snippet but this snippets seems to define methods"
       )
     Just mc -> do
-      let prevDecls = M.fromList (map (\d -> (d_id d, d)) (d_sub mc))
+      let prevDecls =
+            concatMap (\d -> map (\sub -> (d_id sub, sub)) (d_sub d))
+                (compilationUnitToDecls prevCu)
           thisDecls = map memberDeclToDecl methods
           thisDeclsGood = catMaybes thisDecls
       if length thisDecls /= length thisDeclsGood
@@ -745,8 +741,8 @@ mergeMembers prevSnip prevCu snip methods =
                 <> ": cannot handle inner classes or interfaces"
             )
         else do
-          debugM ("Merging " ++ show (length methods) ++ " methods intro main class " ++
-                   show mc ++ " from previous compilation unit ...")
+          debugM ("Merging " ++ show (length methods) ++
+                  " methods into previous compilation unit ...")
           pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
 
 updateSnippetContent :: MergedSnippet -> MergedSnippet -> Fail MergedSnippet

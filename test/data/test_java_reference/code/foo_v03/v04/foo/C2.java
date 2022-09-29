@@ -1,11 +1,11 @@
-//Automatically extracted from test_java.md on 2022-09-27 19:49:10.436604 UTC
+//Automatically extracted from test_java.md on 2022-09-29 06:09:28.671326 UTC
 
 
 //[test_java.md:9]
 // Comment added to the top
 
 
-//[test_java.md:64]
+//[test_java.md:73]
 package foo;
 
 import java.util.*;
@@ -14,21 +14,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class C1 {
-    void bar() {}
+    void bar() { System.out.println("bar"); }
 }
-public class C2 {    
-//[test_java.md:80]
+public class C2 {
+
+//[test_java.md:89]
 
 
-
-    
-//[test_java.md:90]
+//[test_java.md:99]
 
 
-void spam() {}
-    
-//[test_java.md:97]
+//[test_java.md:106]
 double foo(int x) { return x + 1; }
+
+
+
 
 public static void main(String[] args) {
     C2 c = new C2();
@@ -37,6 +37,8 @@ public static void main(String[] args) {
     c.egg();
 }
 
+
+void spam() {}
+
 void egg() {}
 } // main
-

@@ -1,4 +1,4 @@
-//Automatically extracted from test_java.md on 2022-09-28 05:07:11.819901 UTC
+//Automatically extracted from test_java.md on 2022-09-29 06:00:52.396225 UTC
 
 
 //[test_java.md:9]
@@ -21,6 +21,9 @@ class C2 {}
 //[test_java.md:30]
 class OtherC2 {}
 
+class C5{}
+
+interface C4 {}
 
 //[test_java.md:36]
 class C3 {
@@ -28,7 +31,3 @@ class C3 {
     List<String> g;
     C5 h;
 }
-
-interface C4 {}
-
-class C5{}
