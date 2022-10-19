@@ -76,6 +76,14 @@ The Java code plugin supports the following extra arguments for each code snippe
 - clear:BOOL
   Starts a new group if true. Default: false
 
+- contextStart:CODE
+  Emit CODE before the code of the snippet
+- contextEnd:CODE
+  Emit CODE after the code of the snippet
+- context:NAME
+  Emits code before/after the snippet according to some predefined context. Predefined contexts:
+  * "main": puts the code inside the main-method
+
 At most one of arguments method, body, or test can be given.
 
 Processing:
@@ -85,7 +93,7 @@ Assume that the key is K. The plugin then performs the following steps on the sn
 an explicit place: argument, i.e. the snippets in cf_here. Step 1 also applies
 to snippets with an explicit place: argument
 
-STEP 1: Snippets with rewrite:true are rewritten.
+STEP 1: Snippets with rewrite:true and contexts are rewritten.
 
 STEP 2: Snippets with append:true are appended to their predecessor. Snippets with
   standalone:false are prepended to their successor.
@@ -224,12 +232,31 @@ rewrite :: CodeSnippet -> Fail CodeSnippet
 rewrite snip = do
   b <- fromMaybe False <$> getOptionalBoolValue (cc_location snip) "rewrite" (cc_args snip)
   if not b
-    then pure snip
+    then doContext snip
     else
       let code = c_payload (cc_code snip)
           newCode = T.unlines (map rewriteLine (T.lines code))
-       in pure $ snip {cc_code = Code newCode}
+       in doContext (snip {cc_code = Code newCode})
   where
+    doContext snip = do
+      context <- getOptionalStringValue (cc_location snip) "context" (cc_args snip)
+      contextStart <-
+        fromMaybe "" <$> getOptionalStringValue (cc_location snip) "contextStart" (cc_args snip)
+      contextEnd <-
+        fromMaybe "" <$> getOptionalStringValue (cc_location snip) "contextEnd" (cc_args snip)
+      (contextStart2, contextEnd2) <-
+        case context of
+          Nothing -> pure ("", "")
+          Just c ->
+            case M.lookup c contextMap of
+              Just x -> pure x
+              Nothing -> Left ("Unsupported context: " <> c <> ". Known contexts: " <>
+                               showText (M.keys contextMap))
+      let newCode =
+            contextStart <> contextStart2 <> c_payload (cc_code snip) <> contextEnd2 <> contextEnd
+      pure (snip { cc_code = Code newCode })
+    contextMap =
+      M.fromList [("main", ("public static void main(String[] args) {\n", "\n}"))]
     methodReturnType line =
       let ws = T.words (T.strip line)
           isKw x = x `elem` ["public", "private", "protected", "final", "abstract", "static"]
@@ -425,13 +452,6 @@ parseJava locs code = do
   case res of
     Left cu -> pure (Just cu)
     Right _ -> pure Nothing
-
-_parseMembers :: [Location] -> T.Text -> Fail (Maybe [MemberDecl])
-_parseMembers locs code = do
-  res <- parseJavaOrMembers locs code
-  case res of
-    Right mems -> pure (Just mems)
-    Left _ -> pure Nothing
 
 parseJavaOrMembers :: [Location] -> T.Text -> Fail (Either CompilationUnit [MemberDecl])
 parseJavaOrMembers locs code =
@@ -957,5 +977,6 @@ processCodeMap _buildCfg buildArgs _langCfg header cm allCodeSnippets = do
 javaLangConfig :: LangConfig
 javaLangConfig =
   (mkLangConfig "java" ".java" "// " Nothing processCodeMap)
-    { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear", "rewrite"]
+    { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear", "rewrite",
+                      "context", "contextStart", "contextEnd"]
     }

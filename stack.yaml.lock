@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    commit: 2c035815440dd2ec5bb01e0b45273722bc33eae8
+    commit: 918cb0a5bdd4cd0543ecf27962660f1054e5436e
     git: https://github.com/skogsbaer/language-java.git
     name: language-java
     pantry-tree:
-      sha256: df5723c7d77bcb22d8366f42cffdbdab5ed1ce68a8d9e7ed5f639a427e01316e
+      sha256: b3653fe0ac24c86d7b1decd731e43762ed2ca16af2f9ba11223f0d5ab92ccb84
       size: 4415
     version: 0.2.9
   original:
-    commit: 2c035815440dd2ec5bb01e0b45273722bc33eae8
+    commit: 918cb0a5bdd4cd0543ecf27962660f1054e5436e
     git: https://github.com/skogsbaer/language-java.git
 snapshots:
 - completed:
