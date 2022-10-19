@@ -460,7 +460,9 @@ parseJavaOrMembers locs code =
       case parse memberDecls of
         Left errMem ->
           let err = if isToplevel then errCu else errMem
-           in Left (formatLocations locs <> ": " <> showText err)
+              msg = "Error parsing java code at " <> formatLocations locs <> ": " <> showText err
+                    <> "\n\nCode:\n\n~~~\n" <> code <> "\n~~~"
+          in debugM (T.unpack msg) >> Left msg
         Right x -> return (Right x)
     Right x -> return (Left x)
   where
@@ -474,7 +476,10 @@ parseJavaOrMembers locs code =
 type P = Parsec.Parsec [JavaLexer.L JavaLexer.Token] ParserState
 
 memberDecls :: P [MemberDecl]
-memberDecls = list d
+memberDecls = do
+  l <- list d
+  Parsec.eof
+  pure l
   where
     d = do
       loc <- getLocation

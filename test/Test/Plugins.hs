@@ -19,19 +19,23 @@ import Data.Maybe
 import System.Process
 import System.Exit
 import Control.Monad
+import Control.Exception
 import Language.Java.Parser
 import Language.Java.Syntax hiding (Decl, Location)
 
-runTextSlides :: FilePath -> (FilePath -> IO ()) -> IO ()
-runTextSlides mdFile checkFun = withSysTempDir deleteIfNoException "text-slides-test" $ \dir -> do
+runTextSlides :: FilePath -> (SomeException -> IO ()) -> (FilePath -> IO ()) -> IO ()
+runTextSlides mdFile errFun checkFun =
+  withSysTempDir deleteIfNoException "text-slides-test" $ \dir -> do
   copyFile mdFile (dir </> takeFileName mdFile)
   let opts =
         emptyCmdlineOpts
           { co_inputFile = Just (takeFileName mdFile),
             co_outputs = S.fromList [OutputHtml]
           }
-  withCurrentDirectory dir (mainWithOpts opts)
-  checkFun dir
+  res <- try $ withCurrentDirectory dir (mainWithOpts opts)
+  case res of
+    Left e -> errFun e
+    Right _ -> checkFun dir
 
 checkCmd :: String -> IO ()
 checkCmd cmd = do
@@ -58,8 +62,31 @@ compareJava reference generated = do
     _ <- system ("diff -u " ++ reference ++ " " ++ generated)
     fail ("Generated file " ++ generated ++ " differs from reference file " ++ reference)
 
+isAllCodeFile :: FilePath -> FilePath -> Bool
+isAllCodeFile inputFile f =
+  (takeBaseName inputFile ++ ".java") `L.isSuffixOf` f
+
+assertJavaError :: FilePath -> IO ()
+assertJavaError inputFile = runTextSlides inputFile (\_ -> pure ()) $ \outDir -> do
+  genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
+  exitCodes <- forM genFiles $ \f ->
+      if (isAllCodeFile inputFile f) then pure Nothing else do
+        putStrLn ("Compiling " ++ f ++ ", expecting an error")
+        Just <$> system ("javac -cp " ++ jarFile ++ " " ++ f)
+  case L.find isExitFailure exitCodes of
+    Nothing -> fail ("At least one file should fail to compile when checking " ++ inputFile)
+    Just _ -> pure ()
+  where
+    jarFile = "test/data/junit-platform-console-standalone-1.8.1.jar"
+    isExitFailure (Just (ExitFailure _)) = True
+    isExitFailure _ = False
+
+test_javaErrors :: IO ()
+test_javaErrors = do
+  assertJavaError "test/data/test_java_error1.md"
+
 test_java :: IO ()
-test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
+test_java = runTextSlides inputFile throwIO  $ \outDir -> do
   let pluginDir = outDir </> "build/plugins/java/"
       referenceDir = "test/data/test_java_reference"
   genFiles <- myListDirectoryRecursive outDir (\p -> ".java" `L.isSuffixOf` p)
@@ -72,15 +99,15 @@ test_java = runTextSlides "test/data/test_java.md" $ \outDir -> do
     ("notGenerated=" ++ show notGenerated ++ ", extra=" ++ show extra)
     expectedFiles genFiles
   forM_ expectedFiles $ \f ->
-      unless (isAllCodeFile f) $ do
+      unless (isAllCodeFile inputFile f) $ do
         putStrLn ("Compiling " ++ f)
         checkCmd ("javac -cp " ++ jarFile ++ " " ++ f)
   let referenceFiles = javaFiles referenceDir
   forM_ (zip referenceFiles expectedFiles) $ \(ref, gen) ->
-    unless (isAllCodeFile ref) $ compareJava ref gen
+    unless (isAllCodeFile inputFile ref) $ compareJava ref gen
   where
+    inputFile = "test/data/test_java.md"
     jarFile = "test/data/junit-platform-console-standalone-1.8.1.jar"
-    isAllCodeFile f = "test_java.java" `L.isSuffixOf` f
     javaFiles dir =
       let outAll = dir </> "test_java.java"
           codeDir = dir </> "code"
