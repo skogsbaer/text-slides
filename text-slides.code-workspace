@@ -6,12 +6,13 @@
     ],
     "settings": {
         "[haskell]": {
-            "editor.formatOnSave": true
+            "editor.formatOnSave": false
         },
         "python.autoComplete.extraPaths": [
             "bar",
             "/Users/swehr/.vscode/extensions/stefanwehr.write-your-python-program-0.12.5/python/src/"
         ],
-        "python.linting.enabled": false
+        "python.linting.enabled": false,
+        "haskell.formattingProvider": "none"
     }
 }
