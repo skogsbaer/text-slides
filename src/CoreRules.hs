@@ -125,6 +125,47 @@ data AnyPluginWithState action
   = forall state.
     AnyPluginWithState (PluginConfig state action) state
 
+-- Reference plugin
+-- The reference plugin is a special plugin that stores the content of previous
+-- calls so that we can reuse them later.
+-- Each plugin call may supply an id via the argument id:"foo", the reference
+-- plugin is then invoked like this: ~~~reference(id:"foo")
+newtype PluginCallId = PluginCallId { unPluginCallId :: T.Text }
+  deriving (Eq, Ord)
+
+type PluginCallMap = M.Map PluginCallId T.Text
+
+referencePluginName :: PluginName
+referencePluginName = PluginName "reference"
+
+extractIdFromCall :: PluginCall -> Fail (PluginCall, Maybe PluginCallId)
+extractIdFromCall call = do
+  callId <- getOptionalStringValue loc "id" argMap
+  let newArgMap = M.delete "id" argMap
+  pure (call { pc_args = newArgMap }, fmap PluginCallId callId)
+  where
+    loc = pc_location call
+    argMap = pc_args call
+
+storePluginCall :: Maybe PluginCallId -> T.Text -> PluginCallMap -> PluginCallMap
+storePluginCall callId result m =
+  case callId of
+    Nothing -> m
+    Just k -> M.insert k result m
+
+runReferencePlugin :: PluginCall -> PluginCallMap -> Fail T.Text
+runReferencePlugin call m = do
+  callId <- PluginCallId <$> getRequiredStringValue loc "id" argMap
+  case M.lookup callId m of
+    Nothing ->
+      Left (unLocation loc <> ": no previous plugin call with ID " <>
+        unPluginCallId callId <> " found")
+    Just t ->
+      pure t
+  where
+    loc = pc_location call
+    argMap = pc_args call
+
 transformMarkdown ::
   forall m.
   MonadFail m =>
@@ -137,21 +178,22 @@ transformMarkdown ::
   m (T.Text, [PluginCall])
 transformMarkdown warnFun cfg buildArgs pm inFile md = do
   tokens <- failInM $ parseMarkdown inFile pluginKindMap md
-  (revLines, _) <- foldM tokenToLine ([], M.empty) tokens
-  let calls =
-        flip mapMaybe tokens $ \case
-          Line _ -> Nothing
-          Plugin call -> Just call
-  return (T.unlines $ reverse revLines, calls)
+  (revLines, revCalls, _, _) <- foldM tokenToLine ([], [], M.empty, M.empty) tokens
+  return (T.unlines $ reverse revLines, reverse revCalls)
   where
     tokenToLine ::
-      ([T.Text], M.Map PluginName (AnyPluginWithState m)) ->
+      ([T.Text], [PluginCall], M.Map PluginName (AnyPluginWithState m), PluginCallMap) ->
       Token ->
-      m ([T.Text], M.Map PluginName (AnyPluginWithState m))
-    tokenToLine (acc, stateMap) tok =
+      m ([T.Text], [PluginCall], M.Map PluginName (AnyPluginWithState m), PluginCallMap)
+    tokenToLine (acc, calls, stateMap, callMap) tok =
       case tok of
-        Line t -> return (t : acc, stateMap)
-        Plugin call -> do
+        Line t -> return (t : acc, calls, stateMap, callMap)
+        Plugin call
+          | pc_pluginName call == referencePluginName -> do
+            t <- failInM $ runReferencePlugin call callMap
+            return (t : acc, calls, stateMap, callMap)
+        Plugin call' -> do
+          (call, callId) <- failInM $ extractIdFromCall call'
           old <- getPluginWithState (pc_pluginName call) stateMap
           case old of
             AnyPluginWithState plugin pluginState -> do
@@ -159,11 +201,15 @@ transformMarkdown warnFun cfg buildArgs pm inFile md = do
               case pluginRes of
                 Right (t, newState) ->
                   let newPluginWithState = AnyPluginWithState plugin newState
-                   in return (t : acc, M.insert (pc_pluginName call) newPluginWithState stateMap)
+                   in return (t : acc,
+                              call : calls,
+                              M.insert (pc_pluginName call) newPluginWithState stateMap,
+                              storePluginCall callId t callMap
+                             )
                 Left err -> do
                   warnFun (unLocation (pc_location call) <> ": plugin call failed: " <> err)
                   -- insert the old state into the map, it might have been just initialized
-                  return (acc, M.insert (pc_pluginName call) old stateMap)
+                  return (acc, call:calls, M.insert (pc_pluginName call) old stateMap, callMap)
     getPluginWithState ::
       PluginName -> M.Map PluginName (AnyPluginWithState m) -> m (AnyPluginWithState m)
     getPluginWithState pluginName stateMap =
@@ -179,6 +225,7 @@ transformMarkdown warnFun cfg buildArgs pm inFile md = do
               state <- p_init plugin
               return (AnyPluginWithState plugin state)
     pluginKindMap =
+      M.insert referencePluginName PluginWithBody $
       flip M.map pm $ \(AnyPluginConfig plugin) -> p_kind plugin
 
 findVarFile :: FilePath -> Action (Maybe FilePath)
