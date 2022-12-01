@@ -126,6 +126,11 @@ test_java = runTextSlides inputFile throwIO  $ \outDir -> do
           outAlt3 = codeDir </> "alternative/default_pkg_v02/C3.java"
           outAlt4 = codeDir </> "alternative2/C1.java"
           outAppend = codeDir </> "Append/C1.java"
+          outD11 = codeDir </> "foo1/v01/foo1/D.java"
+          outD12 = codeDir </> "foo1/v02/foo1/D.java"
+          outD13 = codeDir </> "foo1/v03/foo1/D.java"
+          outD21 = codeDir </> "foo2/v01/foo2/D.java"
+          outD22 = codeDir </> "foo2/v02/foo2/D.java"
        in [ outAll,
             outDef1,
             outDef2,
@@ -141,5 +146,10 @@ test_java = runTextSlides inputFile throwIO  $ \outDir -> do
             outAlt2,
             outAlt3,
             outAlt4,
-            outAppend
+            outAppend,
+            outD11,
+            outD12,
+            outD13,
+            outD21,
+            outD22
           ]

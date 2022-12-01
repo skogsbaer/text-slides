@@ -223,3 +223,45 @@ int b = a + 2;
 ~~~java(file:"Append", body:"blub")
 int b = a + 1;
 ~~~
+
+With class:NAME we can specify explicitly to which class method is added.
+Either, we do it at the snippet.
+
+~~~java
+package foo1;
+public class D {
+}
+class C {
+  static void bar() {
+  }
+}
+~~~
+
+~~~java(class:"C")
+    public static void main(String[] args) {
+        bar();
+    }
+~~~
+
+~~~java(class:"C")
+    public static void main(String[] args) {
+        bar();
+        bar();
+    }
+~~~
+
+Or globally:
+
+~~~java(class:"C")
+package foo2;
+class C {
+    void bar() {
+    }
+}
+public class D {
+}
+~~~
+
+~~~java
+void foo() { bar(); }
+~~~

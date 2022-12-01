@@ -76,6 +76,12 @@ The Java code plugin supports the following extra arguments for each code snippe
   Emits code before/after the snippet according to some predefined context. Predefined contexts:
   * "main": puts the code inside the main-method
 
+- class:NAME
+  Specifies to which class the code of the snippet is added/updated. If added to the first
+  snippet of a group, the argument specifies the default class where code of other snippets
+  should be appended/updated. If added to a non-toplevel snippet, it defines the class
+  for this very snippet.
+
 At most one of arguments method, body, or test can be given.
 
 Processing:
@@ -116,13 +122,17 @@ data JBody = JBody
   }
   deriving (Eq, Show)
 
+newtype ClassName = ClassName {unClassName :: T.Text}
+  deriving (Eq, Show)
+
 data MergedSnippet = MergedSnippet
   { ms_clear :: Bool,
     ms_baseSnippets :: T.Text,
     ms_methodSnippets :: [T.Text],
     ms_bodySnippets :: [JBody],
     ms_testSnippets :: [JTest],
-    ms_locations :: [Location]
+    ms_locations :: [Location],
+    ms_class :: Maybe ClassName
   }
   deriving (Eq, Show)
 
@@ -137,6 +147,7 @@ The group ID is the group name, made unique if necessary by appending version st
 "_01", "_02" ... The group name is the package name if it's not the default package,
 "default_pkg" otherwise.
 
+The main class of a SnippetGroup is the main class of the first MergedSnippet (if it exists).
 -}
 
 data PackageName
@@ -150,7 +161,8 @@ newtype GroupId = GroupId {unGroupId :: T.Text}
 data SnippetGroup = SnippetGroup
   { sg_package :: PackageName,
     sg_groupId :: GroupId,
-    sg_snippets :: [MergedSnippet]
+    sg_snippets :: [MergedSnippet],
+    sg_mainClass :: Maybe ClassName
   }
   deriving (Eq, Show)
 
@@ -165,7 +177,10 @@ STEP 5: The content of each merged snippet in each group is updated.
       snippet with the method being updated.
     - If no such method exists, the new content of the snippet is the content of the preceding
       snippet with the method being appended to the content of the main class of the preceding
-      snippet.
+      snippet. The main class is either explicitly provided by the snippet itself (through argument
+      class:NAME, stored in field ms_class) or by the snippet group (class:NAME argument
+      of first snippet in the group, stored in field sg_mainClass), or it is determined
+      as explained below.
   * CASE toplevel.
     The new content of the snippet is the content of the preceding snippet such that
      - declarations that already exist in the preceding snippet are replaced,
@@ -175,18 +190,17 @@ STEP 5: The content of each merged snippet in each group is updated.
 
 After this step, we still have a list of type [SnippetGroup] for each key K, but with
 updated content.
+
+The default main class is the first public class (if any exists) or the first non-public
+class (otherwise).
 -}
 
 {-
 STEP 6: Transform a list [SnippetGroup] into a list [JSnippet].
   - The version is just the postion of the snippet in group.
-  - The class name is determined as follows:
-    * First public class
-    * First non-public class
-    If no such class is found, the name 'Main' is assumed.
+  - js_mainClass is the name of the main class. The main class is the mainClass of the SnippetGroup
+    (if there exists one), or the default main class (see above), or 'Main'.
 -}
-newtype ClassName = ClassName {unClassName :: T.Text}
-  deriving (Eq, Show)
 
 newtype Version = Version {unVersion :: Int}
   deriving (Eq, Show)
@@ -389,6 +403,23 @@ snippetKind cs = do
 snippetsToText :: [CodeSnippet] -> T.Text
 snippetsToText = mkCode javaLangConfig
 
+classFromPreMergeSnippet :: PreMergedSnippet -> Fail (Maybe ClassName)
+classFromPreMergeSnippet pms = do
+  loop (pms_baseSnippets pms) Nothing
+  where
+    loop [] acc = pure acc
+    loop (codeSnippet:rest) acc = do
+      let args = cc_args codeSnippet
+          loc = cc_location codeSnippet
+      ms <- getOptionalStringValue loc "class" args
+      case (ms, acc) of
+        (Just t, Just clsName) -> do
+          if clsName == ClassName t
+            then loop rest acc
+            else Left (unLocation loc <> ": conflicting class name for snippet")
+        (Just t, Nothing) -> loop rest (Just (ClassName t))
+        (Nothing, _) -> loop rest acc
+
 merge :: [CodeSnippet] -> Fail [MergedSnippet]
 merge snips = do
   annotatedSnips <- annotateAppend snips
@@ -402,6 +433,7 @@ merge snips = do
           (x : _) ->
             fromMaybe False <$> getOptionalBoolValue (cc_location x) "clear" (cc_args x)
           [] -> pure False
+      cls <- classFromPreMergeSnippet pms
       pure $
         MergedSnippet
           { ms_clear = clear,
@@ -411,7 +443,8 @@ merge snips = do
               map (\(name, cs) -> JBody name (snippetsToText cs)) (pms_bodySnippets pms),
             ms_testSnippets =
               map (\(name, cs) -> JTest name (snippetsToText cs)) (pms_testSnippets pms),
-            ms_locations = map cc_location (pms_baseSnippets pms)
+            ms_locations = map cc_location (pms_baseSnippets pms),
+            ms_class = cls
           }
     loop :: Maybe PreMergedSnippet -> [(CodeSnippet, Bool)] -> Fail [PreMergedSnippet]
     loop Nothing [] = pure [emptyPreMergedSnippet]
@@ -533,7 +566,7 @@ groupSnippets mss = do
     loop Nothing (x : xs) = do
       mPkgName <- getPackageName (ms_locations x) (ms_baseSnippets x)
       let pkgName = fromMaybe PackageDefault mPkgName
-          group = SnippetGroup pkgName (groupIdFromPkgName pkgName) [x]
+          group = SnippetGroup pkgName (groupIdFromPkgName pkgName) [x] (ms_class x)
       loop (Just group) xs
     loop (Just group) [] = pure [group]
     loop (Just group) (x : xs) = do
@@ -548,7 +581,7 @@ groupSnippets mss = do
       case mPkgName of
         Just pkgName -> do
           -- start new group
-          let newGroup = SnippetGroup pkgName (groupIdFromPkgName pkgName) [x]
+          let newGroup = SnippetGroup pkgName (groupIdFromPkgName pkgName) [x] (ms_class x)
           rest <- loop (Just newGroup) xs
           pure (group : rest)
         Nothing ->
@@ -710,19 +743,39 @@ mergeCu prevSnip prevCu snip cu =
       thisDecls = compilationUnitToDecls cu
    in mergeWithPrev prevSnip prevDecls snip thisDecls AddAtEnd
 
+data MainClassMode = MainClassForFilename | MainClassForPatching
 {-
+  If not given via groupClass or in snip:
   * First public class
   * First non-public class
 -}
-findMainClass :: CompilationUnit -> Maybe Decl
-findMainClass cu =
+findMainClass ::
+    MainClassMode -> Maybe ClassName -> MergedSnippet -> CompilationUnit -> Fail (Maybe Decl)
+findMainClass mode groupClass snip cu =
   let decls = compilationUnitToDecls cu
-   in case L.find d_public decls of
-        Just d -> Just d
-        Nothing ->
-          case decls of
-            [] -> Nothing
-            (x : _) -> Just x
+      public = L.find d_public decls
+   in case (mode, public) of
+        (MainClassForFilename, Just d) -> pure (Just d)
+        _ ->
+          case mainClassName of
+              Just name ->
+                case L.find (\d -> d_id d == name) decls of
+                  Just d -> pure (Just d)
+                  Nothing -> Left ("Unknown main class specified at locations " <>
+                                    showText (map unLocation (ms_locations snip)))
+              Nothing ->
+                case public of
+                    Just d -> pure (Just d)
+                    Nothing ->
+                      case decls of
+                        [] -> pure Nothing
+                        (x : _) -> pure (Just x)
+  where
+    mainClassName =
+      fmap unClassName $
+      case mode of
+        MainClassForFilename -> groupClass
+        MainClassForPatching -> (ms_class snip `mplus` groupClass)
 
 {-
   * CASE nested, i.e. the code contains only methods. The plugin tries to find methods with
@@ -734,9 +787,11 @@ findMainClass cu =
       snippet.
 -}
 mergeMembers ::
-  MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl] -> Fail MergedSnippet
-mergeMembers prevSnip prevCu snip methods =
-  case findMainClass prevCu of
+  Maybe ClassName -> MergedSnippet -> CompilationUnit -> MergedSnippet -> [MemberDecl]
+  -> Fail MergedSnippet
+mergeMembers mClassName prevSnip prevCu snip methods = do
+  mainClass <- findMainClass MainClassForPatching mClassName snip prevCu
+  case mainClass of
     Nothing ->
       Left
       ( formatLocations (ms_locations snip)
@@ -759,15 +814,15 @@ mergeMembers prevSnip prevCu snip methods =
                   " methods into previous compilation unit ...")
           pure $ mergeWithPrev prevSnip prevDecls snip thisDeclsGood (AddHere (d_end mc))
 
-updateSnippetContent :: MergedSnippet -> MergedSnippet -> Fail MergedSnippet
-updateSnippetContent prevSnip snip = do
+updateSnippetContent :: Maybe ClassName -> MergedSnippet -> MergedSnippet -> Fail MergedSnippet
+updateSnippetContent mClassName prevSnip snip = do
   mPrevCu <- parseJava (ms_locations prevSnip) (ms_baseSnippets prevSnip)
   mThisParsed <- parseJavaOrMembers (ms_locations snip) (ms_baseSnippets snip)
   case (mPrevCu, mThisParsed) of
     (Just prevCu, Left thisCu) ->
       pure $ mergeCu prevSnip prevCu snip thisCu
     (Just prevCu, Right thisMethods) ->
-      mergeMembers prevSnip prevCu snip thisMethods
+      mergeMembers mClassName prevSnip prevCu snip thisMethods
     _ ->
       pure $
         snip
@@ -790,19 +845,19 @@ updateGroup sg = do
   where
     loop _ [] = pure []
     loop prev (x : xs) = do
-      newX <- updateSnippetContent prev x
+      newX <- updateSnippetContent (sg_mainClass sg) prev x
       rest <- loop newX xs
       pure (newX : rest)
 
 -- STEP 6
-getMainClassName :: [Location] -> T.Text -> Fail (Maybe ClassName)
-getMainClassName locs code = do
+getMainClassName :: Maybe ClassName -> MergedSnippet -> [Location] -> T.Text -> Fail (Maybe ClassName)
+getMainClassName groupClass snip locs code = do
   mCu <- parseJava locs code
   case mCu of
     Nothing -> pure Nothing
-    Just cu ->
-      let mClass = findMainClass cu
-       in pure (fmap (ClassName . d_id) mClass)
+    Just cu -> do
+      mClass <- findMainClass MainClassForFilename groupClass snip cu
+      pure (fmap (ClassName . d_id) mClass)
 
 _classDeclIdent :: ClassDecl -> Ident
 _classDeclIdent d =
@@ -830,7 +885,7 @@ snippetGroupToJSnippets key group =
                 if ".java" `L.isSuffixOf` fp
                   then Just (ClassName $ T.pack $ takeBaseName fp)
                   else Nothing
-      mClsName <- getMainClassName (ms_locations ms) (ms_baseSnippets ms)
+      mClsName <- getMainClassName (sg_mainClass group) ms (ms_locations ms) (ms_baseSnippets ms)
       pure $
         JSnippet
           { js_baseSnippets = ms_baseSnippets ms,
@@ -847,9 +902,16 @@ snippetGroupToJSnippets key group =
 
 -- Orchestration
 
+checkForNoTabs :: CodeSnippet -> Action ()
+checkForNoTabs cs = do
+  let t = c_payload (cc_code cs)
+  when (T.any (== '\t') t) $
+    fail (T.unpack (unLocation (cc_location cs) <> ": found TAB in snippet"))
+
 processSnippets :: CodeFilePath -> [CodeSnippet] -> Action [JSnippet]
 processSnippets key snippets = do
   debug ("snippets: " ++ show snippets)
+  forM_ snippets checkForNoTabs
   -- Step 1
   snippets <- failInM $ mapM rewrite snippets
   debug ("After step 1, snippets: " ++ show snippets)
@@ -972,5 +1034,5 @@ javaLangConfig :: LangConfig
 javaLangConfig =
   (mkLangConfig "java" ".java" "// " Nothing processCodeMap)
     { lc_extraArgs = ["method", "body", "test", "append", "standalone", "clear", "rewrite",
-                      "context", "contextStart", "contextEnd"]
+                      "context", "contextStart", "contextEnd", "class"]
     }
