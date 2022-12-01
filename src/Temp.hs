@@ -45,7 +45,7 @@ deleteManually :: DeleteStrategy a
 deleteManually = DeleteOnResult "deleteManually" (const False) (const False)
 
 defaultTemporaryDirectory :: MonadIO m => m FilePath
-defaultTemporaryDirectory = liftIO $ Dir.getTemporaryDirectory
+defaultTemporaryDirectory = liftIO Dir.getTemporaryDirectory
 
 withSysTempFile ::
     (MonadMask m, MonadIO m)
@@ -54,7 +54,7 @@ withSysTempFile ::
     -> ((FilePath, IO.Handle) -> m b)
     -> m b
 withSysTempFile strat template action =
-    do tmpDir <- liftIO $ Dir.getTemporaryDirectory
+    do tmpDir <- liftIO Dir.getTemporaryDirectory
        withTempFile strat tmpDir template action
 
 withSysTempDir ::
@@ -64,7 +64,7 @@ withSysTempDir ::
     -> (FilePath -> m b)
     -> m b
 withSysTempDir strat template action =
-    do tmpDir <- liftIO $ Dir.getTemporaryDirectory
+    do tmpDir <- liftIO Dir.getTemporaryDirectory
        withTempDir strat tmpDir template action
 
 withTempFile ::
@@ -135,7 +135,7 @@ withTempSomething create remove describe strat tmpDir template action =
 
 ignoringIOErrors :: IO () -> IO ()
 ignoringIOErrors ioe =
-    ioe `Control.Exception.catch` (\e -> const (return ()) (e :: IOError))
+    ioe `Control.Exception.catch` (\(_ :: IOError) -> return ())
 
 bracketWithResult ::
     (MonadMask m)

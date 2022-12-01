@@ -485,7 +485,7 @@ memberDecls = do
       loc <- getLocation
       ms <- list modifier
       dec <- memberDecl
-      pure $ (dec loc ms)
+      pure (dec loc ms)
 
 -- Returns Nothing if either the code could not be parsed as a compilation unit
 -- or if there is no package declared.
@@ -564,18 +564,15 @@ groupSnippets mss = do
 
 -- STEP 5
 concatCode :: T.Text -> T.Text -> T.Text
-concatCode c1 c2 =
-  if T.strip c1 == ""
-    then c2
-    else
-      if T.strip c2 == ""
-        then c1
-        else c1 <> sep <> c2
+concatCode c1 c2
+  | T.strip c1 == "" = c2
+  | T.strip c2 == "" = c1
+  | otherwise = c1 <> sep <> c2
   where
-    sep =
-      if newlineCount == 0
-        then "\n\n"
-        else if newlineCount == 1 then "\n" else ""
+    sep
+      | newlineCount == 0 = "\n\n"
+      | newlineCount == 1 = "\n"
+      | otherwise = ""
     newlineCount =
       countNewlines (T.takeWhileEnd isSpace c1)
         + countNewlines (T.takeWhile isSpace c2)
@@ -939,7 +936,7 @@ outputJSnippet outDir header start snip end allSnippets allKeys = do
           PackageName p -> Just (T.unpack p)
       dir =
         outDir </> "code" </>
-        (concat $ L.intersperse "/" $ catMaybes [key, groupId, version, pkgName])
+        (L.intercalate "/" (catMaybes [key, groupId, version, pkgName]))
       file = dir </> T.unpack (unClassName (js_mainClass snip)) <.> "java"
   note ("Generating " ++ file)
   myWriteFile file (header <> code)
