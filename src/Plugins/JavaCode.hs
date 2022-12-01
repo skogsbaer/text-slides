@@ -9,14 +9,6 @@ module Plugins.JavaCode
   )
 where
 
-{-
-
-Next steps:
-
-- Make sure that the tests of the lectures AKI_Prog_Java and AdvancedProg are working
-
--}
-
 import Control.Monad
 import Control.Monad.Extra
 import Data.Char (isSpace)
@@ -191,7 +183,7 @@ STEP 6: Transform a list [SnippetGroup] into a list [JSnippet].
   - The class name is determined as follows:
     * First public class
     * First non-public class
-    If no main class is found, the name 'Main' is assumed.
+    If no such class is found, the name 'Main' is assumed.
 -}
 newtype ClassName = ClassName {unClassName :: T.Text}
   deriving (Eq, Show)
