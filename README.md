@@ -211,9 +211,9 @@ sequenceDiagram
 
 ### Header file for beamer presentations
 
-You can specify a file to be included in the header of the latex file for beamer
-presentations, see Pandoc's `--include-in-header` option. The file can be specified
-in the following three ways:
+You can specify files to be included in the header of the latex file for beamer
+presentations, see Pandoc's `--include-in-header` option. The files can be specified
+in the following three ways, all files found are included.
 
 - Command line flag `--beamer-header FILE`.
 - A file named `beamer-header.tex` in the same directory as the input file.
