@@ -121,6 +121,15 @@ readFileWithUnknownEncoding fp = do
     Left _exc -> return $ T.pack $ BSC.unpack bs -- assume it's iso-8859-1
     Right t -> return t
 
+readFileIfExists :: FilePath -> IO (Maybe BS.ByteString)
+readFileIfExists fp = do
+  ex <- liftIO $ Dir.doesFileExist fp
+  if ex
+    then do
+      bs <- BS.readFile fp
+      pure (Just bs)
+    else pure Nothing
+
 genPdf :: FilePath -> Action ()
 genPdf pdf = do
   cfg <- getBuildConfig
@@ -136,8 +145,7 @@ genPdf pdf = do
     runPdfLatex cfg env runNo = do
       let logFile = pdf -<.> ".log"
           navFile = pdf -<.> ".nav"
-      navExists <- liftIO $ Dir.doesFileExist navFile
-      navBefore <- if navExists then liftIO $ BS.readFile navFile else return BS.empty
+      navBefore <- liftIO $ readFileIfExists navFile
       mySystem
         INFO
         DontPrintStdout
@@ -150,7 +158,7 @@ genPdf pdf = do
           pdf -<.> texBodyExt
         ]
         (Just env)
-      navAfter <- liftIO $ BS.readFile navFile
+      navAfter <- liftIO $ readFileIfExists navFile
       -- check if we must re-run latex
       log <- liftIO $ readFileWithUnknownEncoding logFile -- do not depend on the log file
       let mRerunPhrase = findPhrase log rerunPhrases

@@ -70,7 +70,7 @@ getDependenciesFromPandocJson inFile = do
 data PandocMode = PandocModeHtml | PandocModeLatex
 
 runPandoc :: BuildConfig -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
-runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
+runPandoc cfg args mode inFile {- .json -} outFile {- .html or .tex -} = do
   need [inFile]
   deps <- fmap (map (\f -> buildDir </> f)) $ liftIO $ getDependenciesFromPandocJson inFile
   writeDeps outFile deps
@@ -96,10 +96,14 @@ runPandoc cfg _args mode inFile {- .json -} outFile {- .html or .tex -} = do
              ]
           ++ optIfSet "--lua-filter=" (bc_luaFilter cfg)
       latexArgs = do
-        need (bc_beamerHeader cfg)
+        let (headers, to) =
+              case ba_inputMode args of
+                InputModeArticle -> (bc_articleHeader cfg, "latex")
+                InputModeSlides -> (bc_beamerHeader cfg, "beamer")
+        need headers
         return $
-          "--to=beamer" :
-          (flip map (bc_beamerHeader cfg) $ \h -> "--include-in-header=" ++ h)
+          ("--to=" ++ to) :
+          (flip map headers $ \h -> "--include-in-header=" ++ h)
       htmlArgs = do
         needIfSet (bc_htmlHeader cfg)
         return $

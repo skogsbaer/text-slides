@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Cmdline
   ( CmdlineOpts (..),
@@ -25,13 +26,23 @@ readOutputModes t =
         l <- mapM readOutputMode texts
         return (S.fromList l)
 
+readInputMode :: T.Text -> Maybe InputMode
+readInputMode t =
+  let x = T.toLower (T.strip t)
+  in if
+      | x == "article" -> Just InputModeArticle
+      | x == "slides" -> Just InputModeSlides
+      | otherwise -> Nothing
+
 showOutputModes :: S.Set OutputMode -> T.Text
 showOutputModes modes =
   T.intercalate "," (map showOutputMode $ S.toList modes)
 
 data CmdlineOpts = CmdlineOpts
   { co_inputFile :: !(Maybe FilePath),
+    co_inputMode :: Maybe InputMode,
     co_beamerHeader :: Maybe FilePath,
+    co_articleHeader :: Maybe FilePath,
     co_htmlHeader :: Maybe FilePath,
     co_luaFilter :: Maybe FilePath,
     co_mermaidConfig :: Maybe FilePath,
@@ -50,7 +61,9 @@ emptyCmdlineOpts :: CmdlineOpts
 emptyCmdlineOpts =
   CmdlineOpts
     { co_inputFile = Nothing,
+      co_inputMode = Nothing,
       co_beamerHeader = Nothing,
+      co_articleHeader = Nothing,
       co_htmlHeader = Nothing,
       co_luaFilter = Nothing,
       co_mermaidConfig = Nothing,
@@ -66,6 +79,12 @@ emptyCmdlineOpts =
 
 cmdlineOptsParser :: Parser CmdlineOpts
 cmdlineOptsParser = do
+  co_inputMode <-
+    optional $
+    option (maybeReader (readInputMode . T.pack)) $
+      long "input-mode"
+        <> metavar "MODE"
+        <> help "Set input mode, either article or slides"
   outputs <-
     option (maybeReader (readOutputModes . T.pack)) $
       long "output-mode"
@@ -111,6 +130,17 @@ cmdlineOptsParser = do
                 ++ "placing the file beamer-header.tex next to the input file or inside "
                 ++ "$HOME/.text-slides. All files found are place in the header of the "
                 ++ "presentation."
+            )
+  co_articleHeader <-
+    optional $
+      option str $
+        long "article-header"
+          <> metavar "FILE"
+          <> help
+            ( "File to insert into the header of LaTeX article. Can also be set by "
+                ++ "placing the file article-header.tex next to the input file or inside "
+                ++ "$HOME/.text-slides. All files found are place in the header of the "
+                ++ "article."
             )
   co_htmlHeader <-
     optional $

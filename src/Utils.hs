@@ -208,3 +208,9 @@ insertText idx t toInsert = replaceText idx t idx toInsert
 -- | Deletes a substring from the given text. Start is inclusive, end exclusive.
 deleteText :: Int -> T.Text -> Int -> T.Text
 deleteText start t end = replaceText start t end ""
+
+removeLast :: [a] -> [a]
+removeLast l =
+  case reverse l of
+    [] -> error "empty list"
+    (_:xs) -> reverse xs

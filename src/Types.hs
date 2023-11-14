@@ -35,25 +35,30 @@ data OutputMode
   | OutputLatex
   deriving (Eq, Ord, Show, Enum, Bounded)
 
-outputModeStringMapping :: [(OutputMode, T.Text, T.Text)]
+data InputMode
+  = InputModeSlides
+  | InputModeArticle
+  deriving (Show, Typeable, Eq, Generic, Hashable, Binary, NFData, Enum, Bounded)
+
+outputModeStringMapping :: [(OutputMode, T.Text)]
 outputModeStringMapping =
-  [ (OutputHtml, "html", ".html"),
-    (OutputPdf, "pdf", ".pdf"),
-    (OutputLatex, "latex", ".text")
+  [ (OutputHtml, "html"),
+    (OutputPdf, "pdf"),
+    (OutputLatex, "latex")
   ]
 
 readOutputMode :: T.Text -> Maybe OutputMode
-readOutputMode s = L.lookup s (map (\(x, y, _) -> (y, x)) outputModeStringMapping)
+readOutputMode s = L.lookup s (map (\(x, y) -> (y, x)) outputModeStringMapping)
 
 showOutputMode :: OutputMode -> T.Text
 showOutputMode m =
   fromJustNote ("unknown output mode: " ++ show m) $
-    L.lookup m $ map (\(x, y, _) -> (x, y)) outputModeStringMapping
+    L.lookup m outputModeStringMapping
 
 outputModeToExtension :: OutputMode -> T.Text
 outputModeToExtension m =
   fromJustNote ("unknown output mode: " ++ show m) $
-    L.lookup m $ map (\(x, y, _) -> (x, y)) outputModeStringMapping
+    L.lookup m outputModeStringMapping
 
 allOutputModes :: S.Set OutputMode
 allOutputModes = S.fromList [minBound .. maxBound]
@@ -61,6 +66,7 @@ allOutputModes = S.fromList [minBound .. maxBound]
 -- BuildArgs must not contain any file on which we need to put a dependency with need.
 data BuildArgs = BuildArgs
   { ba_inputFile :: FilePath,
+    ba_inputMode :: InputMode,
     ba_verbose :: Bool,
     ba_searchDir :: FilePath
   }
@@ -115,6 +121,7 @@ data BuildConfig = BuildConfig
     bc_mermaid :: FilePath,
     bc_pdfcrop :: FilePath,
     bc_beamerHeader :: [FilePath],
+    bc_articleHeader :: [FilePath],
     bc_htmlHeader :: Maybe FilePath,
     bc_luaFilter :: Maybe FilePath,
     bc_mermaidConfig :: Maybe FilePath,

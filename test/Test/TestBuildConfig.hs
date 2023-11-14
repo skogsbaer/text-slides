@@ -27,6 +27,7 @@ testBuildConfig =
       bc_convert = "convert",
       bc_mermaid = "mermaid",
       bc_beamerHeader = [],
+      bc_articleHeader = [],
       bc_htmlHeader = Nothing,
       bc_luaFilter = Nothing,
       bc_externalLangConfigs = ExternalLangConfigs [],
@@ -38,6 +39,7 @@ testBuildArgs :: BuildArgs
 testBuildArgs =
   BuildArgs
     { ba_inputFile = "sample.md",
+      ba_inputMode = InputModeSlides,
       ba_verbose = False,
       ba_searchDir = "."
     }
@@ -69,3 +71,13 @@ sampleInput =
   ]
 }
 |]
+
+test_parseInputMode :: IO ()
+test_parseInputMode = do
+  subAssert $  assertParse InputModeSlides "there is\nno\nmeta block"
+  subAssert $  assertParse InputModeArticle "there is\n---\ninputMode: ARTICLE\n---"
+  subAssert $  assertParse InputModeSlides "---\ninputMode: slides\n---"
+  where
+    assertParse expected content = do
+      m <- getInputModeFromText "<input>" content
+      assertEqual expected m

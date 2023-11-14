@@ -1,6 +1,7 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module BuildConfig
-  ( computeBuildConfig, computeBuildArgs,
+  ( computeBuildConfig, computeBuildArgs, getInputModeFromText,
     ExternalLangConfig (..),
     ExternalLangConfigs (..),
   )
@@ -9,9 +10,12 @@ where
 import Cmdline
 import Control.Monad
 import qualified Data.Aeson as J
+import qualified Data.Aeson.KeyMap as Km
 import qualified Data.List as L
 import Data.Maybe
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import Data.Yaml as Y
 import Development.Shake
 import Logging
 import Plugins.Code
@@ -21,11 +25,45 @@ import System.Exit
 import System.FilePath
 import Types
 import Utils
+import qualified Data.Text.Encoding as T
 
 getHomeCfgDir :: IO FilePath
 getHomeCfgDir = do
   home <- getHomeDirectory
   return $ home </> ".text-slides"
+
+defInputMode :: InputMode
+defInputMode = InputModeSlides
+
+instance J.FromJSON InputMode where
+  parseJSON (J.Object v) = do
+    case Km.lookup "inputMode" v of
+      Nothing -> pure defInputMode
+      Just (J.String (T.toLower -> t)) ->
+        if
+          | t == "slides" -> pure InputModeSlides
+          | t == "article" -> pure InputModeArticle
+          | otherwise -> fail ("Invalid value for inputMode: " ++ show t)
+      Just x -> fail ("Invalid value for inputMode: " ++ show x)
+  parseJSON _ = pure defInputMode
+
+getInputModeFromText :: MonadFail m => FilePath -> T.Text -> m InputMode
+getInputModeFromText fp t =
+  -- drop until the first ---
+  case dropWhile (\t -> T.strip t /= "---") (T.lines t) of
+    [] -> pure defInputMode
+    (_ : rest) -> do
+      -- keep until next ---
+      case takeWhile (\t -> T.strip t /= "---" && T.strip t /= "...") rest of
+        yamlInput ->
+          case Y.decodeEither' (T.encodeUtf8 (T.unlines yamlInput)) of
+            Right mode -> pure mode
+            Left err -> fail ("Error parsing yaml block from file " <> fp <> ": " <> show err)
+
+getInputModeFromFile :: FilePath -> IO InputMode
+getInputModeFromFile fp = do
+  content <- T.readFile fp
+  getInputModeFromText fp content
 
 computeBuildArgs :: CmdlineOpts -> IO BuildArgs
 computeBuildArgs opts = do
@@ -50,10 +88,14 @@ computeBuildArgs opts = do
   unless exists $ do
     putStrLn $ "Input file " ++ inputFile ++ " does not exist, aborting!"
     exitWith (ExitFailure 1)
-  let searchDir = takeDirectory inputFile
+  modeInFile <- getInputModeFromFile inputFile
+  infoIO ("Input mode from file: " ++ show modeInFile)
+  let inputMode = fromMaybe modeInFile (co_inputMode opts)
+      searchDir = takeDirectory inputFile
       args =
         BuildArgs
           { ba_inputFile = inputFile,
+            ba_inputMode = inputMode,
             ba_searchDir = searchDir,
             ba_verbose = co_verbose opts
           }
@@ -64,6 +106,9 @@ computeBuildConfig opts args = do
   beamerHeader <-
     searchFiles "beamer-header.tex" (co_beamerHeader opts) >>= mapM (liftIO . canonicalizePath)
   info ("beamerHeader: " ++ show beamerHeader)
+  articleHeader <-
+    searchFiles "article-header.tex" (co_articleHeader opts) >>= mapM (liftIO . canonicalizePath)
+  info ("articleHeader: " ++ show articleHeader)
   htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
   info ("htmlHeader: " ++ show htmlHeader)
   luaFilter <- searchFile "pandoc-filter.lua" (co_luaFilter opts) >>= canonicalize
@@ -91,6 +136,7 @@ computeBuildConfig opts args = do
             bc_mermaid = "mmdc",
             bc_pdfcrop = "pdfcrop",
             bc_beamerHeader = beamerHeader,
+            bc_articleHeader = articleHeader,
             bc_htmlHeader = htmlHeader,
             bc_luaFilter = luaFilter,
             bc_mermaidConfig = mermaidConfig,

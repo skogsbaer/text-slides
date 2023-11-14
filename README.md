@@ -19,11 +19,20 @@ text-slides example/sample-talk.md
 ~~~
 
 To
-render it as PDF use
+render it as PDF slide show use
 
 ~~~
 text-slides --pdf example/sample-talk.md
 ~~~
+
+To render the input markdown as an article use
+
+~~~
+text-slides --input-mode article --pdf example/sample-talk.md
+~~~
+
+To force rendering as an article, you can also set
+`inputMode:yes` in the first yaml meta block of the `.md` file.
 
 ## Plugins
 
@@ -277,7 +286,8 @@ For a theme include with pandoc, you can save to definition to a file with this 
 The markdown content may use variables like this: ``{{variableName}}`
 
 The values of the variables are defined in a file `INPUT.yaml`, where
-`INPUT.md` is the name of the input file.
+`INPUT.md` is the name of the input file or in a file `text-slides.yaml` or
+in a file `../text-slides.yaml`.
 
 ## Structuring Code
 
