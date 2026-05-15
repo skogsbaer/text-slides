@@ -72,7 +72,7 @@ computeBuildArgs opts = do
       Just f -> return f
       Nothing -> do
         files <- myListDirectory "." $ \f ->
-          takeExtension f == ".md" && not ("." `L.isPrefixOf` (takeBaseName f))
+          takeExtension f == ".md" && not (isIgnoredMdFile (takeBaseName f))
         case files of
           [f] -> return f
           [] -> do
@@ -100,6 +100,11 @@ computeBuildArgs opts = do
             ba_verbose = co_verbose opts
           }
   pure args
+  where
+    isIgnoredMdFile f =
+      "." `L.isPrefixOf` f ||
+      "CLAUDE" `L.isPrefixOf` f
+
 
 computeBuildConfig :: CmdlineOpts -> BuildArgs -> Action BuildConfig
 computeBuildConfig opts args = do
