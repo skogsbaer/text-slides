@@ -108,6 +108,7 @@ computeBuildConfig opts args = do
   info ("beamerHeader: " ++ show beamerHeader)
   articleHeader <-
     searchFiles "article-header.tex" (co_articleHeader opts) >>= mapM (liftIO . canonicalizePath)
+  latexMacros <- searchMacroFiles >>= mapM (liftIO . canonicalizePath)
   info ("articleHeader: " ++ show articleHeader)
   htmlHeader <- searchFile "html-header.html" (co_htmlHeader opts) >>= canonicalize
   info ("htmlHeader: " ++ show htmlHeader)
@@ -135,8 +136,8 @@ computeBuildConfig opts args = do
             bc_convert = "convert",
             bc_mermaid = "mmdc",
             bc_pdfcrop = "pdfcrop",
-            bc_beamerHeader = beamerHeader,
-            bc_articleHeader = articleHeader,
+            bc_beamerHeader = beamerHeader ++ latexMacros,
+            bc_articleHeader = articleHeader ++ latexMacros,
             bc_htmlHeader = htmlHeader,
             bc_luaFilter = luaFilter,
             bc_mermaidConfig = mermaidConfig,
@@ -151,6 +152,13 @@ computeBuildConfig opts args = do
       return (Just cp)
     searchFile = searchFile' (ba_searchDir args)
     searchFiles = searchFiles' (ba_searchDir args)
+    searchMacroFiles = do
+      let p = "text-slides-macros.tex"
+          cands = [ba_searchDir args </> p, ba_searchDir  args </> ".." </> p]
+      results <- forM cands $ \cand -> do
+        b <- doesFileExist cand
+        return $ if b then Just cand else Nothing
+      pure (catMaybes  results)
 
 searchFile' :: FilePath -> FilePath -> Maybe FilePath -> Action (Maybe FilePath)
 searchFile' searchDir path mCmdLine = do

@@ -120,28 +120,24 @@ cmdlineOptsParser = do
         <> metavar "N"
         <> help "Set number of jobs"
         <> value 2
+  let helpTex what p =
+        "File to insert into the header of a " ++ what ++ ". Can also be set by "
+        ++ "placing the file " ++ p ++ " next to the input file or inside "
+        ++ "$HOME/.text-slides. In addition, text-slides-macros.tex and "
+        ++ "../text-slides-macros.tex are considered. "
+        ++ "All files found are put in the header of the .tex file."
   co_beamerHeader <-
     optional $
       option str $
         long "beamer-header"
           <> metavar "FILE"
-          <> help
-            ( "File to insert into the header of a beamer presentation. Can also be set by "
-                ++ "placing the file beamer-header.tex next to the input file or inside "
-                ++ "$HOME/.text-slides. All files found are place in the header of the "
-                ++ "presentation."
-            )
+          <> help (helpTex "beamer presentation" "beamer-header.tex")
   co_articleHeader <-
     optional $
       option str $
         long "article-header"
           <> metavar "FILE"
-          <> help
-            ( "File to insert into the header of LaTeX article. Can also be set by "
-                ++ "placing the file article-header.tex next to the input file or inside "
-                ++ "$HOME/.text-slides. All files found are place in the header of the "
-                ++ "article."
-            )
+          <> help (helpTex "LaTeX article" "article-header.tex")
   co_htmlHeader <-
     optional $
       option str $

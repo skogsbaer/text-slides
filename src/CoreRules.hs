@@ -67,7 +67,7 @@ getDependenciesFromPandocJson inFile = do
               _ -> Nothing
       | otherwise = Nothing
 
-data PandocMode = PandocModeHtml | PandocModeLatex
+data PandocMode = PandocModeHtml | PandocModeLatex | PandocModeText
 
 runPandoc :: BuildConfig -> BuildArgs -> PandocMode -> FilePath -> FilePath -> Action ()
 runPandoc cfg args mode inFile {- .json -} outFile {- .html or .tex -} = do
@@ -104,6 +104,7 @@ runPandoc cfg args mode inFile {- .json -} outFile {- .html or .tex -} = do
         return $
           ("--to=" ++ to) :
           (flip map headers $ \h -> "--include-in-header=" ++ h)
+      textArgs = pure ["--to=plain"]
       htmlArgs = do
         needIfSet (bc_htmlHeader cfg)
         return $
@@ -116,6 +117,7 @@ runPandoc cfg args mode inFile {- .json -} outFile {- .html or .tex -} = do
     case mode of
       PandocModeHtml -> htmlArgs
       PandocModeLatex -> latexArgs
+      PandocModeText -> textArgs
   let pandocArgs = commonPandocArgs ++ modePandocArgs ++ [inFile]
   note ("Generating " ++ outFile)
   mySystem INFO DontPrintStdout (bc_pandoc cfg) pandocArgs Nothing
@@ -291,6 +293,9 @@ coreRules args = do
   [outFile ".html"] &%> \[html] -> do
     cfg <- getBuildConfig
     void $ runPandoc cfg args PandocModeHtml json html
+  [outFile ".txt"] &%> \[html] -> do
+    cfg <- getBuildConfig
+    void $ runPandoc cfg args PandocModeText json html
   [outFile ".tex", outFile ".deps"] &%> \[tex, _] -> do
     cfg <- getBuildConfig
     void $ runPandoc cfg args PandocModeLatex json tex

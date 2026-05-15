@@ -33,6 +33,8 @@ data OutputMode
   = OutputHtml
   | OutputPdf
   | OutputLatex
+  | OutputText
+  | OutputJson
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 data InputMode
@@ -44,7 +46,9 @@ outputModeStringMapping :: [(OutputMode, T.Text)]
 outputModeStringMapping =
   [ (OutputHtml, "html"),
     (OutputPdf, "pdf"),
-    (OutputLatex, "latex")
+    (OutputLatex, "tex"),
+    (OutputText, "txt"),
+    (OutputJson, "json")
   ]
 
 readOutputMode :: T.Text -> Maybe OutputMode
