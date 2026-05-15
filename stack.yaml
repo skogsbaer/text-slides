@@ -1,4 +1,6 @@
-resolver: nightly-2022-09-26
+resolver: lts-24.3
+allow-newer: true
+require-stack-version: ">= 1.7.1"
 packages:
 - .
 extra-deps:
