@@ -89,9 +89,7 @@ runMermaid cfg _buildArgs pdfFile = do
             b <- doesFileExist f
             pure $ if b then ["-c", f] else []
       note
-        ( "Running mermaid for diagram at " ++ T.unpack (mc_where mermaidCall) ++ " to produce "
-            ++ pdfFile
-        )
+        ( "Running mermaid on " ++ mddFile ++ " to produce " ++ pdfFile )
       let mermaidArgs =
             map T.unpack (mc_args mermaidCall)
               ++ cfgOpts ++
@@ -108,8 +106,7 @@ mermaidPluginRules args = do
   (pluginDir mermaidPluginName) ++ "/*.mdd" %> \_ -> need [mdRawOutputFile args]
 
 data MermaidCall = MermaidCall
-  { mc_where :: T.Text,
-    mc_args :: [T.Text]
+  { mc_args :: [T.Text]
   }
   deriving (Generic, Show)
 
@@ -123,10 +120,9 @@ mermaidCallAndHash call = do
   let mermaidCall =
         MermaidCall
           { mc_args =
-              toArg "--width" (ma_imageWidth args) ++ toArg "--height" (ma_imageHeight args),
-            mc_where = unLocation (pc_location call)
+              toArg "--width" (ma_imageWidth args) ++ toArg "--height" (ma_imageHeight args)
           }
-      hash = md5OfText (showText mermaidCall <> pc_body call)
+      hash = md5OfText (showText (mc_args mermaidCall) <> pc_body call)
   return (mermaidCall, hash)
   where
     toArg _ Nothing = []
