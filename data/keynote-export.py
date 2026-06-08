@@ -57,6 +57,9 @@ def crop(pdf):
 
 
 def main():
+    if sys.platform != 'darwin':
+        print('Warning: this script only works on macOS (it requires Keynote). Skipping.')
+        sys.exit(0)
     ap = ArgumentParser()
     ap.add_argument('-k', '--keynote', help="Path to the keynote to convert",
                     required=True)
