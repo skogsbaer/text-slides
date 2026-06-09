@@ -21,4 +21,8 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+build/
 example/build/
+.claude/
+.devcontainer/
+.vscode/
