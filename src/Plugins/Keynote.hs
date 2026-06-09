@@ -18,6 +18,7 @@ module Plugins.Keynote
   )
 where
 
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except
 import qualified Data.List as L
 import Data.Maybe
@@ -27,6 +28,7 @@ import Development.Shake.FilePath
 import Logging
 import Paths_text_slides
 import System.Directory
+import System.Info (os)
 import Text.Printf
 import Types
 import Utils
@@ -146,16 +148,23 @@ keynotePluginRules _args = do
 runPlugin :: BuildConfig -> BuildArgs -> () -> PluginCall -> ExceptT T.Text Action (T.Text, ())
 runPlugin cfg _buildArgs () call = do
   args <- exceptInM $ parseArgs call
-  dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
-  -- all output files are place directly in the build directory
-  let relDir = makeRelative buildDir dir
-      fileName =
-        if ka_trim args
-          then printf "slides_%03d-crop.pdf" (ka_slide args)
-          else printf "slides_%03d.pdf" (ka_slide args)
-      imgFile = relDir </> "slides" </> fileName
-      res = markdownImage imgFile (ka_width args, ka_height args) (ka_center args)
-  return (res, ())
+  if os /= "darwin"
+    then do
+      lift $ warn "keynote plugin not supported on this platform, inserting placeholder"
+      let msg = printf "Keynote slide %d (file %s) not rendered on non-macOS platforms"
+                  (ka_slide args) (ka_file args)
+      return (T.pack msg, ())
+    else do
+      dir <- liftIO $ keynoteFileToBuildPath cfg (ka_file args)
+      -- all output files are place directly in the build directory
+      let relDir = makeRelative buildDir dir
+          fileName =
+            if ka_trim args
+              then printf "slides_%03d-crop.pdf" (ka_slide args)
+              else printf "slides_%03d.pdf" (ka_slide args)
+          imgFile = relDir </> "slides" </> fileName
+          res = markdownImage imgFile (ka_width args, ka_height args) (ka_center args)
+      return (res, ())
 
 processAllCalls ::
   BuildConfig -> BuildArgs -> [PluginCall] -> ExceptT T.Text Action ()
